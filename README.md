@@ -23,4 +23,4 @@ A Swift package for fetching weather data from the Open-Meteo API, with support 
 Add OpenMeteoKit to your project through Xcode:
 
 1. File → Add Package Dependencies
-2. Enter the repository URL: `https://github.com/yourusername/OpenMeteoKit.git`
+2. Enter the repository URL: `https://github.com/acorscadden/OpenMeteoKit.git`
