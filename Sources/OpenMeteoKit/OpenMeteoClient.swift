@@ -18,7 +18,7 @@ public struct OpenMeteoClient {
     longitude: Double,
     models: [WeatherModel] = [.ecmwfIfs025, .iconSeamless],
     windSpeedUnit: WindSpeedUnit = .knots
-  ) async throws -> WeatherResponse {
+  ) async throws -> OpenMeteoWeatherResponse {
     let url = buildURL(
       latitude: latitude,
       longitude: longitude,
@@ -34,7 +34,7 @@ public struct OpenMeteoClient {
     }
 
     do {
-      return try JSONDecoder().decode(WeatherResponse.self, from: data)
+      return try JSONDecoder().decode(OpenMeteoWeatherResponse.self, from: data)
     } catch {
       throw OpenMeteoError.decodingError(error)
     }
@@ -82,7 +82,7 @@ public enum OpenMeteoError: Error {
 
 // MARK: - Response Models
 
-public struct WeatherResponse: Decodable {
+public struct OpenMeteoWeatherResponse: Decodable {
   public let latitude: Double
   public let longitude: Double
   public let generationTimeMs: Double

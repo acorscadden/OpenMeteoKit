@@ -58,7 +58,7 @@ import Foundation
   let jsonData = jsonString.data(using: .utf8)!
   let decoder = JSONDecoder()
 
-  let response = try decoder.decode(WeatherResponse.self, from: jsonData)
+  let response = try decoder.decode(OpenMeteoWeatherResponse.self, from: jsonData)
 
   #expect(response.latitude == 52.5)
   #expect(response.longitude == 13.5)
@@ -127,7 +127,7 @@ import Foundation
 
   let jsonData = jsonString.data(using: .utf8)!
   let decoder = JSONDecoder()
-  let response = try decoder.decode(WeatherResponse.self, from: jsonData)
+  let response = try decoder.decode(OpenMeteoWeatherResponse.self, from: jsonData)
 
   #expect(response.hourly.count == 2)
 
@@ -186,7 +186,7 @@ import Foundation
 
   let jsonData = jsonString.data(using: .utf8)!
   let decoder = JSONDecoder()
-  let response = try decoder.decode(WeatherResponse.self, from: jsonData)
+  let response = try decoder.decode(OpenMeteoWeatherResponse.self, from: jsonData)
 
   let hourlyData = response.hourly[0]
   let date = hourlyData.time
