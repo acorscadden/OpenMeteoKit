@@ -2,6 +2,8 @@
 
 A Swift package for fetching weather data from the Open-Meteo API, with support for multiple weather models and wind data.
 
+[![Swift](https://github.com/acorscadden/OpenMeteoKit/actions/workflows/swift.yml/badge.svg)](https://github.com/acorscadden/OpenMeteoKit/actions/workflows/swift.yml)
+
 ## Features
 
 - 🌪️ **Wind Data**: Fetch wind speed, direction, and gusts
