@@ -65,6 +65,7 @@ public struct OpenMeteoClient {
 public enum WeatherModel: String, CaseIterable {
   case ecmwfIfs025 = "ecmwf_ifs025"
   case iconSeamless = "icon_seamless"
+  case gem_hrdps_continental = "gem_hrdps_continental"
 }
 
 public enum WindSpeedUnit: String, CaseIterable {
@@ -149,6 +150,15 @@ public struct OpenMeteoWeatherResponse: Decodable {
         windGustsUnit: units.windGusts10mIconSeamless ?? "kn"
       )
 
+      modelData[.gem_hrdps_continental] = WeatherModelData(
+        windSpeed: data.windSpeed10mGemHrdpsContinental?[safe: index],
+        windDirection: data.windDirection10mGemHrdpsContinental?[safe: index],
+        windGusts: data.windGusts10mGemHrdpsContinental?[safe: index],
+        windSpeedUnit: units.windSpeed10mGemHrdpsContinental ?? "kn",
+        windDirectionUnit: units.windDirection10mGemHrdpsContinental ?? "°",
+        windGustsUnit: units.windGusts10mGemHrdpsContinental ?? "kn"
+      )
+
       return HourlyData(time: date, models: modelData)
     }
   }
@@ -162,6 +172,9 @@ private struct HourlyUnits: Decodable {
   let windSpeed10mIconSeamless: String?
   let windDirection10mIconSeamless: String?
   let windGusts10mIconSeamless: String?
+  let windSpeed10mGemHrdpsContinental: String?
+  let windDirection10mGemHrdpsContinental: String?
+  let windGusts10mGemHrdpsContinental: String?
 
   enum CodingKeys: String, CodingKey {
     case time
@@ -171,6 +184,9 @@ private struct HourlyUnits: Decodable {
     case windSpeed10mIconSeamless = "wind_speed_10m_icon_seamless"
     case windDirection10mIconSeamless = "wind_direction_10m_icon_seamless"
     case windGusts10mIconSeamless = "wind_gusts_10m_icon_seamless"
+    case windSpeed10mGemHrdpsContinental = "wind_speed_10m_gem_hrdps_continental"
+    case windDirection10mGemHrdpsContinental = "wind_direction_10m_gem_hrdps_continental"
+    case windGusts10mGemHrdpsContinental = "wind_gusts_10m_gem_hrdps_continental"
   }
 }
 
@@ -182,6 +198,9 @@ private struct RawHourlyData: Decodable {
   let windSpeed10mIconSeamless: [Double]?
   let windDirection10mIconSeamless: [Int]?
   let windGusts10mIconSeamless: [Double]?
+  let windSpeed10mGemHrdpsContinental: [Double]?
+  let windDirection10mGemHrdpsContinental: [Int]?
+  let windGusts10mGemHrdpsContinental: [Double]?
 
   enum CodingKeys: String, CodingKey {
     case time
@@ -191,6 +210,9 @@ private struct RawHourlyData: Decodable {
     case windSpeed10mIconSeamless = "wind_speed_10m_icon_seamless"
     case windDirection10mIconSeamless = "wind_direction_10m_icon_seamless"
     case windGusts10mIconSeamless = "wind_gusts_10m_icon_seamless"
+    case windSpeed10mGemHrdpsContinental = "wind_speed_10m_gem_hrdps_continental"
+    case windDirection10mGemHrdpsContinental = "wind_direction_10m_gem_hrdps_continental"
+    case windGusts10mGemHrdpsContinental = "wind_gusts_10m_gem_hrdps_continental"
   }
 }
 
