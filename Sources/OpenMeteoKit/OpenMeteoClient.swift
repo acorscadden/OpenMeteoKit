@@ -125,16 +125,16 @@ public struct OpenMeteoWeatherResponse: Decodable {
     formatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
     formatter.timeZone = TimeZone(abbreviation: "GMT")
 
-    return data.time.enumerated().map { index, timeString in
+    return data.time.enumerated().map { (index: Int, timeString: String) -> HourlyData in
       let date = formatter.date(from: timeString) ?? Date()
 
       var modelData: [WeatherModel: WeatherModelData] = [:]
 
       // ECMWF IFS025 data
       modelData[.ecmwfIfs025] = WeatherModelData(
-        windSpeed: data.windSpeed10mEcmwfIfs025?[safe: index],
-        windDirection: data.windDirection10mEcmwfIfs025?[safe: index],
-        windGusts: data.windGusts10mEcmwfIfs025?[safe: index],
+        windSpeed: data.windSpeed10mEcmwfIfs025?[safe: index] ?? nil,
+        windDirection: data.windDirection10mEcmwfIfs025?[safe: index] ?? nil,
+        windGusts: data.windGusts10mEcmwfIfs025?[safe: index] ?? nil,
         windSpeedUnit: units.windSpeed10mEcmwfIfs025 ?? "kn",
         windDirectionUnit: units.windDirection10mEcmwfIfs025 ?? "°",
         windGustsUnit: units.windGusts10mEcmwfIfs025 ?? "kn"
@@ -142,18 +142,19 @@ public struct OpenMeteoWeatherResponse: Decodable {
 
       // Icon Seamless data
       modelData[.iconSeamless] = WeatherModelData(
-        windSpeed: data.windSpeed10mIconSeamless?[safe: index],
-        windDirection: data.windDirection10mIconSeamless?[safe: index],
-        windGusts: data.windGusts10mIconSeamless?[safe: index],
+        windSpeed: data.windSpeed10mIconSeamless?[safe: index] ?? nil,
+        windDirection: data.windDirection10mIconSeamless?[safe: index] ?? nil,
+        windGusts: data.windGusts10mIconSeamless?[safe: index] ?? nil,
         windSpeedUnit: units.windSpeed10mIconSeamless ?? "kn",
         windDirectionUnit: units.windDirection10mIconSeamless ?? "°",
         windGustsUnit: units.windGusts10mIconSeamless ?? "kn"
       )
 
+      // GEM HRDPS Continental data
       modelData[.gem_hrdps_continental] = WeatherModelData(
-        windSpeed: data.windSpeed10mGemHrdpsContinental?[safe: index],
-        windDirection: data.windDirection10mGemHrdpsContinental?[safe: index],
-        windGusts: data.windGusts10mGemHrdpsContinental?[safe: index],
+        windSpeed: data.windSpeed10mGemHrdpsContinental?[safe: index] ?? nil,
+        windDirection: data.windDirection10mGemHrdpsContinental?[safe: index] ?? nil,
+        windGusts: data.windGusts10mGemHrdpsContinental?[safe: index] ?? nil,
         windSpeedUnit: units.windSpeed10mGemHrdpsContinental ?? "kn",
         windDirectionUnit: units.windDirection10mGemHrdpsContinental ?? "°",
         windGustsUnit: units.windGusts10mGemHrdpsContinental ?? "kn"
@@ -192,15 +193,15 @@ private struct HourlyUnits: Decodable {
 
 private struct RawHourlyData: Decodable {
   let time: [String]
-  let windSpeed10mEcmwfIfs025: [Double]?
-  let windDirection10mEcmwfIfs025: [Int]?
-  let windGusts10mEcmwfIfs025: [Double]?
-  let windSpeed10mIconSeamless: [Double]?
-  let windDirection10mIconSeamless: [Int]?
-  let windGusts10mIconSeamless: [Double]?
-  let windSpeed10mGemHrdpsContinental: [Double]?
-  let windDirection10mGemHrdpsContinental: [Int]?
-  let windGusts10mGemHrdpsContinental: [Double]?
+  let windSpeed10mEcmwfIfs025: [Double?]?
+  let windDirection10mEcmwfIfs025: [Int?]?
+  let windGusts10mEcmwfIfs025: [Double?]?
+  let windSpeed10mIconSeamless: [Double?]?
+  let windDirection10mIconSeamless: [Int?]?
+  let windGusts10mIconSeamless: [Double?]?
+  let windSpeed10mGemHrdpsContinental: [Double?]?
+  let windDirection10mGemHrdpsContinental: [Int?]?
+  let windGusts10mGemHrdpsContinental: [Double?]?
 
   enum CodingKeys: String, CodingKey {
     case time
@@ -230,9 +231,9 @@ public struct WeatherModelData {
   public let windSpeed: Double?
   public let windDirection: Int?
   public let windGusts: Double?
-  public let windSpeedUnit: String
-  public let windDirectionUnit: String
-  public let windGustsUnit: String
+  public let windSpeedUnit: String?
+  public let windDirectionUnit: String?
+  public let windGustsUnit: String?
 }
 
 private extension Array {
