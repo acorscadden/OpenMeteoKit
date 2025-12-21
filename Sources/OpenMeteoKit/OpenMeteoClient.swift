@@ -53,7 +53,7 @@ public struct OpenMeteoClient {
     components.queryItems = [
       URLQueryItem(name: "latitude", value: String(latitude)),
       URLQueryItem(name: "longitude", value: String(longitude)),
-      URLQueryItem(name: "hourly", value: "wind_speed_10m,wind_direction_10m,wind_gusts_10m"),
+      URLQueryItem(name: "hourly", value: "wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,rain,showers,snowfall,precipitation_probability,weather_code"),
       URLQueryItem(name: "models", value: modelString),
       URLQueryItem(name: "wind_speed_unit", value: windSpeedUnit.rawValue)
     ]
@@ -137,7 +137,19 @@ public struct OpenMeteoWeatherResponse: Decodable {
         windGusts: data.windGusts10mEcmwfIfs025?[safe: index] ?? nil,
         windSpeedUnit: units.windSpeed10mEcmwfIfs025 ?? "kn",
         windDirectionUnit: units.windDirection10mEcmwfIfs025 ?? "°",
-        windGustsUnit: units.windGusts10mEcmwfIfs025 ?? "kn"
+        windGustsUnit: units.windGusts10mEcmwfIfs025 ?? "kn",
+        precipitation: data.precipitationEcmwfIfs025?[safe: index] ?? nil,
+        rain: data.rainEcmwfIfs025?[safe: index] ?? nil,
+        showers: data.showersEcmwfIfs025?[safe: index] ?? nil,
+        snowfall: data.snowfallEcmwfIfs025?[safe: index] ?? nil,
+        precipitationProbability: data.precipitationProbabilityEcmwfIfs025?[safe: index] ?? nil,
+        precipitationUnit: units.precipitationEcmwfIfs025 ?? "mm",
+        rainUnit: units.rainEcmwfIfs025 ?? "mm",
+        showersUnit: units.showersEcmwfIfs025 ?? "mm",
+        snowfallUnit: units.snowfallEcmwfIfs025 ?? "cm",
+        precipitationProbabilityUnit: units.precipitationProbabilityEcmwfIfs025 ?? "%",
+        weatherCode: data.weatherCodeEcmwfIfs025?[safe: index] ?? nil,
+        weatherCodeUnit: units.weatherCodeEcmwfIfs025 ?? "wmo code"
       )
 
       // Icon Seamless data
@@ -147,7 +159,19 @@ public struct OpenMeteoWeatherResponse: Decodable {
         windGusts: data.windGusts10mIconSeamless?[safe: index] ?? nil,
         windSpeedUnit: units.windSpeed10mIconSeamless ?? "kn",
         windDirectionUnit: units.windDirection10mIconSeamless ?? "°",
-        windGustsUnit: units.windGusts10mIconSeamless ?? "kn"
+        windGustsUnit: units.windGusts10mIconSeamless ?? "kn",
+        precipitation: data.precipitationIconSeamless?[safe: index] ?? nil,
+        rain: data.rainIconSeamless?[safe: index] ?? nil,
+        showers: data.showersIconSeamless?[safe: index] ?? nil,
+        snowfall: data.snowfallIconSeamless?[safe: index] ?? nil,
+        precipitationProbability: data.precipitationProbabilityIconSeamless?[safe: index] ?? nil,
+        precipitationUnit: units.precipitationIconSeamless ?? "mm",
+        rainUnit: units.rainIconSeamless ?? "mm",
+        showersUnit: units.showersIconSeamless ?? "mm",
+        snowfallUnit: units.snowfallIconSeamless ?? "cm",
+        precipitationProbabilityUnit: units.precipitationProbabilityIconSeamless ?? "%",
+        weatherCode: data.weatherCodeIconSeamless?[safe: index] ?? nil,
+        weatherCodeUnit: units.weatherCodeIconSeamless ?? "wmo code"
       )
 
       // GEM HRDPS Continental data
@@ -157,7 +181,19 @@ public struct OpenMeteoWeatherResponse: Decodable {
         windGusts: data.windGusts10mGemHrdpsContinental?[safe: index] ?? nil,
         windSpeedUnit: units.windSpeed10mGemHrdpsContinental ?? "kn",
         windDirectionUnit: units.windDirection10mGemHrdpsContinental ?? "°",
-        windGustsUnit: units.windGusts10mGemHrdpsContinental ?? "kn"
+        windGustsUnit: units.windGusts10mGemHrdpsContinental ?? "kn",
+        precipitation: data.precipitationGemHrdpsContinental?[safe: index] ?? nil,
+        rain: data.rainGemHrdpsContinental?[safe: index] ?? nil,
+        showers: data.showersGemHrdpsContinental?[safe: index] ?? nil,
+        snowfall: data.snowfallGemHrdpsContinental?[safe: index] ?? nil,
+        precipitationProbability: data.precipitationProbabilityGemHrdpsContinental?[safe: index] ?? nil,
+        precipitationUnit: units.precipitationGemHrdpsContinental ?? "mm",
+        rainUnit: units.rainGemHrdpsContinental ?? "mm",
+        showersUnit: units.showersGemHrdpsContinental ?? "mm",
+        snowfallUnit: units.snowfallGemHrdpsContinental ?? "cm",
+        precipitationProbabilityUnit: units.precipitationProbabilityGemHrdpsContinental ?? "%",
+        weatherCode: data.weatherCodeGemHrdpsContinental?[safe: index] ?? nil,
+        weatherCodeUnit: units.weatherCodeGemHrdpsContinental ?? "wmo code"
       )
 
       return HourlyData(time: date, models: modelData)
@@ -177,6 +213,32 @@ private struct HourlyUnits: Decodable {
   let windDirection10mGemHrdpsContinental: String?
   let windGusts10mGemHrdpsContinental: String?
 
+  // Precipitation units - ECMWF
+  let precipitationEcmwfIfs025: String?
+  let rainEcmwfIfs025: String?
+  let showersEcmwfIfs025: String?
+  let snowfallEcmwfIfs025: String?
+  let precipitationProbabilityEcmwfIfs025: String?
+
+  // Precipitation units - Icon Seamless
+  let precipitationIconSeamless: String?
+  let rainIconSeamless: String?
+  let showersIconSeamless: String?
+  let snowfallIconSeamless: String?
+  let precipitationProbabilityIconSeamless: String?
+
+  // Precipitation units - GEM HRDPS
+  let precipitationGemHrdpsContinental: String?
+  let rainGemHrdpsContinental: String?
+  let showersGemHrdpsContinental: String?
+  let snowfallGemHrdpsContinental: String?
+  let precipitationProbabilityGemHrdpsContinental: String?
+
+  // Weather code units
+  let weatherCodeEcmwfIfs025: String?
+  let weatherCodeIconSeamless: String?
+  let weatherCodeGemHrdpsContinental: String?
+
   enum CodingKeys: String, CodingKey {
     case time
     case windSpeed10mEcmwfIfs025 = "wind_speed_10m_ecmwf_ifs025"
@@ -188,6 +250,32 @@ private struct HourlyUnits: Decodable {
     case windSpeed10mGemHrdpsContinental = "wind_speed_10m_gem_hrdps_continental"
     case windDirection10mGemHrdpsContinental = "wind_direction_10m_gem_hrdps_continental"
     case windGusts10mGemHrdpsContinental = "wind_gusts_10m_gem_hrdps_continental"
+
+    // Precipitation - ECMWF
+    case precipitationEcmwfIfs025 = "precipitation_ecmwf_ifs025"
+    case rainEcmwfIfs025 = "rain_ecmwf_ifs025"
+    case showersEcmwfIfs025 = "showers_ecmwf_ifs025"
+    case snowfallEcmwfIfs025 = "snowfall_ecmwf_ifs025"
+    case precipitationProbabilityEcmwfIfs025 = "precipitation_probability_ecmwf_ifs025"
+
+    // Precipitation - Icon Seamless
+    case precipitationIconSeamless = "precipitation_icon_seamless"
+    case rainIconSeamless = "rain_icon_seamless"
+    case showersIconSeamless = "showers_icon_seamless"
+    case snowfallIconSeamless = "snowfall_icon_seamless"
+    case precipitationProbabilityIconSeamless = "precipitation_probability_icon_seamless"
+
+    // Precipitation - GEM HRDPS
+    case precipitationGemHrdpsContinental = "precipitation_gem_hrdps_continental"
+    case rainGemHrdpsContinental = "rain_gem_hrdps_continental"
+    case showersGemHrdpsContinental = "showers_gem_hrdps_continental"
+    case snowfallGemHrdpsContinental = "snowfall_gem_hrdps_continental"
+    case precipitationProbabilityGemHrdpsContinental = "precipitation_probability_gem_hrdps_continental"
+
+    // Weather code
+    case weatherCodeEcmwfIfs025 = "weather_code_ecmwf_ifs025"
+    case weatherCodeIconSeamless = "weather_code_icon_seamless"
+    case weatherCodeGemHrdpsContinental = "weather_code_gem_hrdps_continental"
   }
 }
 
@@ -203,6 +291,32 @@ private struct RawHourlyData: Decodable {
   let windDirection10mGemHrdpsContinental: [Int?]?
   let windGusts10mGemHrdpsContinental: [Double?]?
 
+  // Precipitation data - ECMWF
+  let precipitationEcmwfIfs025: [Double?]?
+  let rainEcmwfIfs025: [Double?]?
+  let showersEcmwfIfs025: [Double?]?
+  let snowfallEcmwfIfs025: [Double?]?
+  let precipitationProbabilityEcmwfIfs025: [Int?]?
+
+  // Precipitation data - Icon Seamless
+  let precipitationIconSeamless: [Double?]?
+  let rainIconSeamless: [Double?]?
+  let showersIconSeamless: [Double?]?
+  let snowfallIconSeamless: [Double?]?
+  let precipitationProbabilityIconSeamless: [Int?]?
+
+  // Precipitation data - GEM HRDPS
+  let precipitationGemHrdpsContinental: [Double?]?
+  let rainGemHrdpsContinental: [Double?]?
+  let showersGemHrdpsContinental: [Double?]?
+  let snowfallGemHrdpsContinental: [Double?]?
+  let precipitationProbabilityGemHrdpsContinental: [Int?]?
+
+  // Weather code data
+  let weatherCodeEcmwfIfs025: [Int?]?
+  let weatherCodeIconSeamless: [Int?]?
+  let weatherCodeGemHrdpsContinental: [Int?]?
+
   enum CodingKeys: String, CodingKey {
     case time
     case windSpeed10mEcmwfIfs025 = "wind_speed_10m_ecmwf_ifs025"
@@ -214,6 +328,32 @@ private struct RawHourlyData: Decodable {
     case windSpeed10mGemHrdpsContinental = "wind_speed_10m_gem_hrdps_continental"
     case windDirection10mGemHrdpsContinental = "wind_direction_10m_gem_hrdps_continental"
     case windGusts10mGemHrdpsContinental = "wind_gusts_10m_gem_hrdps_continental"
+
+    // Precipitation - ECMWF
+    case precipitationEcmwfIfs025 = "precipitation_ecmwf_ifs025"
+    case rainEcmwfIfs025 = "rain_ecmwf_ifs025"
+    case showersEcmwfIfs025 = "showers_ecmwf_ifs025"
+    case snowfallEcmwfIfs025 = "snowfall_ecmwf_ifs025"
+    case precipitationProbabilityEcmwfIfs025 = "precipitation_probability_ecmwf_ifs025"
+
+    // Precipitation - Icon Seamless
+    case precipitationIconSeamless = "precipitation_icon_seamless"
+    case rainIconSeamless = "rain_icon_seamless"
+    case showersIconSeamless = "showers_icon_seamless"
+    case snowfallIconSeamless = "snowfall_icon_seamless"
+    case precipitationProbabilityIconSeamless = "precipitation_probability_icon_seamless"
+
+    // Precipitation - GEM HRDPS
+    case precipitationGemHrdpsContinental = "precipitation_gem_hrdps_continental"
+    case rainGemHrdpsContinental = "rain_gem_hrdps_continental"
+    case showersGemHrdpsContinental = "showers_gem_hrdps_continental"
+    case snowfallGemHrdpsContinental = "snowfall_gem_hrdps_continental"
+    case precipitationProbabilityGemHrdpsContinental = "precipitation_probability_gem_hrdps_continental"
+
+    // Weather code
+    case weatherCodeEcmwfIfs025 = "weather_code_ecmwf_ifs025"
+    case weatherCodeIconSeamless = "weather_code_icon_seamless"
+    case weatherCodeGemHrdpsContinental = "weather_code_gem_hrdps_continental"
   }
 }
 
@@ -234,6 +374,22 @@ public struct WeatherModelData {
   public let windSpeedUnit: String?
   public let windDirectionUnit: String?
   public let windGustsUnit: String?
+
+  // Precipitation data
+  public let precipitation: Double?
+  public let rain: Double?
+  public let showers: Double?
+  public let snowfall: Double?
+  public let precipitationProbability: Int?
+  public let precipitationUnit: String?
+  public let rainUnit: String?
+  public let showersUnit: String?
+  public let snowfallUnit: String?
+  public let precipitationProbabilityUnit: String?
+
+  // Weather condition
+  public let weatherCode: Int?
+  public let weatherCodeUnit: String?
 }
 
 private extension Array {

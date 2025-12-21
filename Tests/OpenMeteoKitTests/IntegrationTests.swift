@@ -53,6 +53,29 @@ import Foundation
 
     print("✅ Successfully fetched Vancouver weather data for \(response.hourly.count) hours")
 
+    // Verify precipitation data is present
+    if let ecmwfData = firstHour[.ecmwfIfs025] {
+      // Precipitation fields should exist (may be nil if no precip, but the field should decode)
+      #expect(ecmwfData.precipitationUnit == "mm", "Precipitation unit should be mm")
+      #expect(ecmwfData.snowfallUnit == "cm", "Snowfall unit should be cm")
+      #expect(ecmwfData.precipitationProbabilityUnit == "%", "Precipitation probability unit should be %")
+    }
+
+    if let iconData = firstHour[.iconSeamless] {
+      #expect(iconData.precipitationUnit == "mm", "ICON precipitation unit should be mm")
+    }
+
+    // Verify weather code is present
+    if let ecmwfData = firstHour[.ecmwfIfs025] {
+      #expect(ecmwfData.weatherCodeUnit == "wmo code", "Weather code unit should be 'wmo code'")
+      // Weather code should be a valid WMO code (0-99 range)
+      if let code = ecmwfData.weatherCode {
+        #expect(code >= 0 && code <= 99, "Weather code should be in valid WMO range")
+      }
+    }
+
+    print("✅ Precipitation and weather code data verified")
+
   } catch {
     print("❌ Error fetching Vancouver weather data: \(error)")
     print("Error details: \(error.localizedDescription)")

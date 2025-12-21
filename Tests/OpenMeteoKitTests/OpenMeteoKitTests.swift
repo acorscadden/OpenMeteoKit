@@ -227,3 +227,211 @@ import Foundation
   #expect(components.hour == 12)
   #expect(components.minute == 30)
 }
+
+@Test func testPrecipitationDataDecoding() throws {
+  let jsonString = """
+  {
+    "latitude": 49.25,
+    "longitude": -123.1,
+    "generationtime_ms": 0.5,
+    "utc_offset_seconds": -28800,
+    "timezone": "America/Vancouver",
+    "timezone_abbreviation": "PST",
+    "elevation": 70.0,
+    "hourly_units": {
+      "time": "iso8601",
+      "wind_speed_10m_ecmwf_ifs025": "kn",
+      "wind_direction_10m_ecmwf_ifs025": "°",
+      "wind_gusts_10m_ecmwf_ifs025": "kn",
+      "wind_speed_10m_icon_seamless": "kn",
+      "wind_direction_10m_icon_seamless": "°",
+      "wind_gusts_10m_icon_seamless": "kn",
+      "precipitation_ecmwf_ifs025": "mm",
+      "rain_ecmwf_ifs025": "mm",
+      "showers_ecmwf_ifs025": "mm",
+      "snowfall_ecmwf_ifs025": "cm",
+      "precipitation_probability_ecmwf_ifs025": "%",
+      "precipitation_icon_seamless": "mm",
+      "rain_icon_seamless": "mm",
+      "showers_icon_seamless": "mm",
+      "snowfall_icon_seamless": "cm",
+      "precipitation_probability_icon_seamless": "%"
+    },
+    "hourly": {
+      "time": [
+        "2025-12-20T08:00",
+        "2025-12-20T09:00"
+      ],
+      "wind_speed_10m_ecmwf_ifs025": [5.0, 6.0],
+      "wind_direction_10m_ecmwf_ifs025": [180, 190],
+      "wind_gusts_10m_ecmwf_ifs025": [10.0, 12.0],
+      "wind_speed_10m_icon_seamless": [4.5, 5.5],
+      "wind_direction_10m_icon_seamless": [175, 185],
+      "wind_gusts_10m_icon_seamless": [9.0, 11.0],
+      "precipitation_ecmwf_ifs025": [2.5, 1.2],
+      "rain_ecmwf_ifs025": [2.0, 1.0],
+      "showers_ecmwf_ifs025": [0.5, 0.2],
+      "snowfall_ecmwf_ifs025": [0.0, 0.0],
+      "precipitation_probability_ecmwf_ifs025": [80, 60],
+      "precipitation_icon_seamless": [3.0, 1.5],
+      "rain_icon_seamless": [2.5, 1.2],
+      "showers_icon_seamless": [0.5, 0.3],
+      "snowfall_icon_seamless": [0.0, 0.0],
+      "precipitation_probability_icon_seamless": [85, 65]
+    }
+  }
+  """
+
+  let jsonData = jsonString.data(using: .utf8)!
+  let decoder = JSONDecoder()
+  let response = try decoder.decode(OpenMeteoWeatherResponse.self, from: jsonData)
+
+  #expect(response.latitude == 49.25)
+  #expect(response.longitude == -123.1)
+  #expect(response.hourly.count == 2)
+
+  // Test first hour ECMWF precipitation data
+  let firstHourly = response.hourly[0]
+  let ecmwfData = firstHourly[.ecmwfIfs025]
+  #expect(ecmwfData != nil)
+  #expect(ecmwfData?.precipitation == 2.5)
+  #expect(ecmwfData?.rain == 2.0)
+  #expect(ecmwfData?.showers == 0.5)
+  #expect(ecmwfData?.snowfall == 0.0)
+  #expect(ecmwfData?.precipitationProbability == 80)
+  #expect(ecmwfData?.precipitationUnit == "mm")
+  #expect(ecmwfData?.rainUnit == "mm")
+  #expect(ecmwfData?.showersUnit == "mm")
+  #expect(ecmwfData?.snowfallUnit == "cm")
+  #expect(ecmwfData?.precipitationProbabilityUnit == "%")
+
+  // Test first hour Icon Seamless precipitation data
+  let iconData = firstHourly[.iconSeamless]
+  #expect(iconData != nil)
+  #expect(iconData?.precipitation == 3.0)
+  #expect(iconData?.rain == 2.5)
+  #expect(iconData?.showers == 0.5)
+  #expect(iconData?.snowfall == 0.0)
+  #expect(iconData?.precipitationProbability == 85)
+  #expect(iconData?.precipitationUnit == "mm")
+
+  // Test second hour data
+  let secondHourly = response.hourly[1]
+  let secondEcmwf = secondHourly[.ecmwfIfs025]
+  #expect(secondEcmwf?.precipitation == 1.2)
+  #expect(secondEcmwf?.rain == 1.0)
+  #expect(secondEcmwf?.precipitationProbability == 60)
+
+  let secondIcon = secondHourly[.iconSeamless]
+  #expect(secondIcon?.precipitation == 1.5)
+  #expect(secondIcon?.precipitationProbability == 65)
+}
+
+@Test func testPrecipitationWithNullValues() throws {
+  let jsonString = """
+  {
+    "latitude": 49.25,
+    "longitude": -123.1,
+    "generationtime_ms": 0.5,
+    "utc_offset_seconds": 0,
+    "timezone": "GMT",
+    "timezone_abbreviation": "GMT",
+    "elevation": 70.0,
+    "hourly_units": {
+      "time": "iso8601",
+      "wind_speed_10m_ecmwf_ifs025": "kn",
+      "wind_direction_10m_ecmwf_ifs025": "°",
+      "wind_gusts_10m_ecmwf_ifs025": "kn",
+      "precipitation_ecmwf_ifs025": "mm",
+      "rain_ecmwf_ifs025": "mm"
+    },
+    "hourly": {
+      "time": [
+        "2025-12-20T08:00"
+      ],
+      "wind_speed_10m_ecmwf_ifs025": [5.0],
+      "wind_direction_10m_ecmwf_ifs025": [180],
+      "wind_gusts_10m_ecmwf_ifs025": [10.0],
+      "precipitation_ecmwf_ifs025": [null],
+      "rain_ecmwf_ifs025": [1.5]
+    }
+  }
+  """
+
+  let jsonData = jsonString.data(using: .utf8)!
+  let decoder = JSONDecoder()
+  let response = try decoder.decode(OpenMeteoWeatherResponse.self, from: jsonData)
+
+  let hourly = response.hourly[0]
+  let ecmwfData = hourly[.ecmwfIfs025]
+
+  // Precipitation is null, should be nil
+  #expect(ecmwfData?.precipitation == nil)
+  // Rain has a value
+  #expect(ecmwfData?.rain == 1.5)
+  // Wind data should still work
+  #expect(ecmwfData?.windSpeed == 5.0)
+}
+
+@Test func testWeatherCodeDecoding() throws {
+  let jsonString = """
+  {
+    "latitude": 49.25,
+    "longitude": -123.1,
+    "generationtime_ms": 0.5,
+    "utc_offset_seconds": 0,
+    "timezone": "GMT",
+    "timezone_abbreviation": "GMT",
+    "elevation": 70.0,
+    "hourly_units": {
+      "time": "iso8601",
+      "wind_speed_10m_ecmwf_ifs025": "kn",
+      "wind_direction_10m_ecmwf_ifs025": "°",
+      "wind_gusts_10m_ecmwf_ifs025": "kn",
+      "wind_speed_10m_icon_seamless": "kn",
+      "wind_direction_10m_icon_seamless": "°",
+      "wind_gusts_10m_icon_seamless": "kn",
+      "weather_code_ecmwf_ifs025": "wmo code",
+      "weather_code_icon_seamless": "wmo code"
+    },
+    "hourly": {
+      "time": [
+        "2025-12-20T08:00",
+        "2025-12-20T09:00"
+      ],
+      "wind_speed_10m_ecmwf_ifs025": [5.0, 6.0],
+      "wind_direction_10m_ecmwf_ifs025": [180, 190],
+      "wind_gusts_10m_ecmwf_ifs025": [10.0, 12.0],
+      "wind_speed_10m_icon_seamless": [4.5, 5.5],
+      "wind_direction_10m_icon_seamless": [175, 185],
+      "wind_gusts_10m_icon_seamless": [9.0, 11.0],
+      "weather_code_ecmwf_ifs025": [61, 66],
+      "weather_code_icon_seamless": [63, 71]
+    }
+  }
+  """
+
+  let jsonData = jsonString.data(using: .utf8)!
+  let decoder = JSONDecoder()
+  let response = try decoder.decode(OpenMeteoWeatherResponse.self, from: jsonData)
+
+  #expect(response.hourly.count == 2)
+
+  // Test first hour weather codes
+  let firstHourly = response.hourly[0]
+  let ecmwfData = firstHourly[.ecmwfIfs025]
+  #expect(ecmwfData?.weatherCode == 61) // Light rain
+  #expect(ecmwfData?.weatherCodeUnit == "wmo code")
+
+  let iconData = firstHourly[.iconSeamless]
+  #expect(iconData?.weatherCode == 63) // Moderate rain
+  #expect(iconData?.weatherCodeUnit == "wmo code")
+
+  // Test second hour - freezing rain and snow
+  let secondHourly = response.hourly[1]
+  let secondEcmwf = secondHourly[.ecmwfIfs025]
+  #expect(secondEcmwf?.weatherCode == 66) // Light freezing rain
+
+  let secondIcon = secondHourly[.iconSeamless]
+  #expect(secondIcon?.weatherCode == 71) // Slight snowfall
+}
