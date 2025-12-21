@@ -78,17 +78,75 @@ import Foundation
 
   } catch {
     print("❌ Error fetching Vancouver weather data: \(error)")
-    print("Error details: \(error.localizedDescription)")
+    throw error
+  }
+}
 
-    if let decodingError = error as? DecodingError {
-      print("Decoding error details: \(decodingError)")
+@Test func testFetchPrecipitationOnly() async throws {
+  let client = OpenMeteoClient()
+
+  let latitude: Double = 49.2827
+  let longitude: Double = -123.1207
+
+  do {
+    let response = try await client.fetchWeatherData(
+      latitude: latitude,
+      longitude: longitude,
+      models: [.iconSeamless],
+      dataTypes: .precipitation
+    )
+
+    #expect(!response.hourly.isEmpty, "Hourly data should not be empty")
+
+    let firstHour = response.hourly.first!
+    if let iconData = firstHour[.iconSeamless] {
+      // Precipitation data should be present
+      #expect(iconData.precipitationUnit == "mm", "Precipitation unit should be mm")
+      #expect(iconData.weatherCodeUnit == "wmo code", "Weather code unit should be present")
+
+      // Wind data should be nil since we only requested precipitation
+      #expect(iconData.windSpeed == nil, "Wind speed should be nil when only precipitation requested")
+      #expect(iconData.windDirection == nil, "Wind direction should be nil when only precipitation requested")
     }
 
-    if let urlError = error as? URLError {
-      print("URL error code: \(urlError.code)")
-      print("URL error description: \(urlError.localizedDescription)")
+    print("✅ Precipitation-only fetch verified")
+
+  } catch {
+    print("❌ Error fetching precipitation-only data: \(error)")
+    throw error
+  }
+}
+
+@Test func testFetchWindOnly() async throws {
+  let client = OpenMeteoClient()
+
+  let latitude: Double = 49.2827
+  let longitude: Double = -123.1207
+
+  do {
+    let response = try await client.fetchWeatherData(
+      latitude: latitude,
+      longitude: longitude,
+      models: [.ecmwfIfs025, .iconSeamless],
+      dataTypes: .wind
+    )
+
+    #expect(!response.hourly.isEmpty, "Hourly data should not be empty")
+    print("📊 Received \(response.hourly.count) hours of data")
+
+    // Check first hour data
+    let firstHour = response.hourly.first!
+    if let ecmwfData = firstHour[.ecmwfIfs025] {
+      // Precipitation data should be nil since we only requested wind
+      #expect(ecmwfData.precipitation == nil, "Precipitation should be nil when only wind requested")
+      #expect(ecmwfData.weatherCode == nil, "Weather code should be nil when only wind requested")
+      print("✅ Precipitation correctly nil for wind-only request")
     }
 
+    print("✅ Wind-only fetch verified")
+
+  } catch {
+    print("❌ Error fetching wind-only data: \(error)")
     throw error
   }
 }

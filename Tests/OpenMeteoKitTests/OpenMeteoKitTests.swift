@@ -22,6 +22,26 @@ import Foundation
   #expect(WindSpeedUnit.allCases.count == 4)
 }
 
+@Test func testWeatherDataTypeOptionSet() {
+  // Test individual options
+  let windOnly: WeatherDataType = .wind
+  #expect(windOnly.contains(.wind))
+  #expect(!windOnly.contains(.precipitation))
+
+  let precipOnly: WeatherDataType = .precipitation
+  #expect(!precipOnly.contains(.wind))
+  #expect(precipOnly.contains(.precipitation))
+
+  // Test combined options
+  let both: WeatherDataType = [.wind, .precipitation]
+  #expect(both.contains(.wind))
+  #expect(both.contains(.precipitation))
+
+  // Test .all
+  #expect(WeatherDataType.all.contains(.wind))
+  #expect(WeatherDataType.all.contains(.precipitation))
+}
+
 @Test func testWeatherResponseDecoding() throws {
   let jsonString = """
   {

@@ -17,13 +17,15 @@ public struct OpenMeteoClient {
     latitude: Double,
     longitude: Double,
     models: [WeatherModel] = [.ecmwfIfs025, .iconSeamless],
-    windSpeedUnit: WindSpeedUnit = .knots
+    windSpeedUnit: WindSpeedUnit = .knots,
+    dataTypes: WeatherDataType = .all
   ) async throws -> OpenMeteoWeatherResponse {
     let url = buildURL(
       latitude: latitude,
       longitude: longitude,
       models: models,
-      windSpeedUnit: windSpeedUnit
+      windSpeedUnit: windSpeedUnit,
+      dataTypes: dataTypes
     )
 
     let (data, response) = try await session.data(from: url)
@@ -44,16 +46,25 @@ public struct OpenMeteoClient {
     latitude: Double,
     longitude: Double,
     models: [WeatherModel],
-    windSpeedUnit: WindSpeedUnit
+    windSpeedUnit: WindSpeedUnit,
+    dataTypes: WeatherDataType
   ) -> URL {
     var components = URLComponents(string: "\(baseURL)/forecast")!
 
     let modelString = models.map(\.rawValue).joined(separator: ",")
 
+    var hourlyParams: [String] = []
+    if dataTypes.contains(.wind) {
+      hourlyParams.append(contentsOf: ["wind_speed_10m", "wind_direction_10m", "wind_gusts_10m"])
+    }
+    if dataTypes.contains(.precipitation) {
+      hourlyParams.append(contentsOf: ["precipitation", "rain", "showers", "snowfall", "precipitation_probability", "weather_code"])
+    }
+
     components.queryItems = [
       URLQueryItem(name: "latitude", value: String(latitude)),
       URLQueryItem(name: "longitude", value: String(longitude)),
-      URLQueryItem(name: "hourly", value: "wind_speed_10m,wind_direction_10m,wind_gusts_10m,precipitation,rain,showers,snowfall,precipitation_probability,weather_code"),
+      URLQueryItem(name: "hourly", value: hourlyParams.joined(separator: ",")),
       URLQueryItem(name: "models", value: modelString),
       URLQueryItem(name: "wind_speed_unit", value: windSpeedUnit.rawValue)
     ]
@@ -73,6 +84,19 @@ public enum WindSpeedUnit: String, CaseIterable {
   case kmh = "kmh"
   case mph = "mph"
   case ms = "ms"
+}
+
+public struct WeatherDataType: OptionSet, Sendable {
+  public let rawValue: Int
+
+  public init(rawValue: Int) {
+    self.rawValue = rawValue
+  }
+
+  public static let wind = WeatherDataType(rawValue: 1 << 0)
+  public static let precipitation = WeatherDataType(rawValue: 1 << 1)
+
+  public static let all: WeatherDataType = [.wind, .precipitation]
 }
 
 public enum OpenMeteoError: Error {
