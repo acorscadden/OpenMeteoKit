@@ -21,7 +21,7 @@ import Foundation
     let response = try await client.fetchWeatherData(
       latitude: latitude,
       longitude: longitude,
-      models: [.ecmwfIfs025, .iconSeamless, .gem_hrdps_continental],
+      models: [.ecmwfIfs025, .iconSeamless, .gemHrdpsContinental],
       windSpeedUnit: .knots
     )
 
@@ -33,7 +33,7 @@ import Foundation
 
     #expect(firstHour[.ecmwfIfs025] != nil, "ECMWF model data should be present")
     #expect(firstHour[.iconSeamless] != nil, "ICON model data should be present")
-    #expect(firstHour[.gem_hrdps_continental] != nil, "GEM-HRDPS model data should be present")
+    #expect(firstHour[.gemHrdpsContinental] != nil, "GEM-HRDPS model data should be present")
 
     // Verify wind data is present for each model
     if let ecmwfData = firstHour[.ecmwfIfs025] {
@@ -46,7 +46,7 @@ import Foundation
       #expect(iconData.windDirection != nil, "ICON wind direction should be present")
     }
 
-    if let gemData = firstHour[.gem_hrdps_continental] {
+    if let gemData = firstHour[.gemHrdpsContinental] {
       #expect(gemData.windSpeed != nil, "GEM-HRDPS wind speed should be present")
       #expect(gemData.windDirection != nil, "GEM-HRDPS wind direction should be present")
     }
@@ -149,4 +149,143 @@ import Foundation
     print("❌ Error fetching wind-only data: \(error)")
     throw error
   }
+}
+
+// MARK: - Individual Model Tests
+// Note: When querying a single model, the API doesn't suffix field names.
+// We query with 2 models to ensure model-specific keys are returned.
+
+@Test func testGfsSeamlessModel() async throws {
+  let client = OpenMeteoClient()
+  let response = try await client.fetchWeatherData(
+    latitude: 40.7128,
+    longitude: -74.0060,
+    models: [.gfsSeamless, .iconSeamless]
+  )
+
+  #expect(!response.hourly.isEmpty, "Hourly data should not be empty")
+  let firstHour = response.hourly.first!
+  let data = firstHour[.gfsSeamless]
+  #expect(data != nil, "GFS Seamless model data should be present")
+  #expect(data?.windSpeed != nil, "GFS wind speed should be present")
+  print("✅ GFS Seamless model verified")
+}
+
+@Test func testHrrrModel() async throws {
+  let client = OpenMeteoClient()
+  // HRRR only covers CONUS, use US coordinates
+  let response = try await client.fetchWeatherData(
+    latitude: 40.7128,
+    longitude: -74.0060,
+    models: [.hrrr, .gfsSeamless]
+  )
+
+  #expect(!response.hourly.isEmpty, "Hourly data should not be empty")
+  let firstHour = response.hourly.first!
+  let data = firstHour[.hrrr]
+  #expect(data != nil, "HRRR model data should be present")
+  #expect(data?.windSpeed != nil, "HRRR wind speed should be present")
+  print("✅ HRRR model verified")
+}
+
+@Test func testNbmModel() async throws {
+  let client = OpenMeteoClient()
+  // NBM only covers CONUS, use US coordinates
+  let response = try await client.fetchWeatherData(
+    latitude: 40.7128,
+    longitude: -74.0060,
+    models: [.nbm, .gfsSeamless]
+  )
+
+  #expect(!response.hourly.isEmpty, "Hourly data should not be empty")
+  let firstHour = response.hourly.first!
+  let data = firstHour[.nbm]
+  #expect(data != nil, "NBM model data should be present")
+  #expect(data?.windSpeed != nil, "NBM wind speed should be present")
+  print("✅ NBM model verified")
+}
+
+@Test func testEcmwfAifsModel() async throws {
+  let client = OpenMeteoClient()
+  let response = try await client.fetchWeatherData(
+    latitude: 52.52,
+    longitude: 13.405,
+    models: [.ecmwfAifs025, .ecmwfIfs025]
+  )
+
+  #expect(!response.hourly.isEmpty, "Hourly data should not be empty")
+  let firstHour = response.hourly.first!
+  let data = firstHour[.ecmwfAifs025]
+  #expect(data != nil, "ECMWF AIFS model data should be present")
+  // Note: AIFS is an AI model and may have null values for some hours
+  print("✅ ECMWF AIFS model verified")
+}
+
+@Test func testGemGlobalModel() async throws {
+  let client = OpenMeteoClient()
+  let response = try await client.fetchWeatherData(
+    latitude: 45.4215,
+    longitude: -75.6972,
+    models: [.gemGlobal, .gemRegional]
+  )
+
+  #expect(!response.hourly.isEmpty, "Hourly data should not be empty")
+  let firstHour = response.hourly.first!
+  let data = firstHour[.gemGlobal]
+  #expect(data != nil, "GEM Global model data should be present")
+  #expect(data?.windSpeed != nil, "GEM Global wind speed should be present")
+  print("✅ GEM Global model verified")
+}
+
+@Test func testGemRegionalModel() async throws {
+  let client = OpenMeteoClient()
+  // GEM Regional covers North America
+  let response = try await client.fetchWeatherData(
+    latitude: 45.4215,
+    longitude: -75.6972,
+    models: [.gemRegional, .gemGlobal]
+  )
+
+  #expect(!response.hourly.isEmpty, "Hourly data should not be empty")
+  let firstHour = response.hourly.first!
+  let data = firstHour[.gemRegional]
+  #expect(data != nil, "GEM Regional model data should be present")
+  #expect(data?.windSpeed != nil, "GEM Regional wind speed should be present")
+  print("✅ GEM Regional model verified")
+}
+
+@Test func testAllModelsAtOnce() async throws {
+  let client = OpenMeteoClient()
+  // Use US coordinates since some models only cover CONUS
+  let response = try await client.fetchWeatherData(
+    latitude: 40.7128,
+    longitude: -74.0060,
+    models: [
+      .ecmwfIfs025,
+      .ecmwfAifs025,
+      .iconSeamless,
+      .gfsSeamless,
+      .hrrr,
+      .nbm,
+      .gemGlobal,
+      .gemRegional,
+      .gemHrdpsContinental
+    ]
+  )
+
+  #expect(!response.hourly.isEmpty, "Hourly data should not be empty")
+  let firstHour = response.hourly.first!
+
+  // Verify each model has data
+  #expect(firstHour[.ecmwfIfs025] != nil, "ECMWF IFS should be present")
+  #expect(firstHour[.ecmwfAifs025] != nil, "ECMWF AIFS should be present")
+  #expect(firstHour[.iconSeamless] != nil, "ICON should be present")
+  #expect(firstHour[.gfsSeamless] != nil, "GFS should be present")
+  #expect(firstHour[.hrrr] != nil, "HRRR should be present")
+  #expect(firstHour[.nbm] != nil, "NBM should be present")
+  #expect(firstHour[.gemGlobal] != nil, "GEM Global should be present")
+  #expect(firstHour[.gemRegional] != nil, "GEM Regional should be present")
+  #expect(firstHour[.gemHrdpsContinental] != nil, "GEM HRDPS should be present")
+
+  print("✅ All 9 models fetched successfully")
 }

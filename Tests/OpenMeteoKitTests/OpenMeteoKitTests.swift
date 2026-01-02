@@ -9,9 +9,15 @@ import Foundation
 
 @Test func testWeatherModelEnumValues() {
   #expect(WeatherModel.ecmwfIfs025.rawValue == "ecmwf_ifs025")
+  #expect(WeatherModel.ecmwfAifs025.rawValue == "ecmwf_aifs025")
   #expect(WeatherModel.iconSeamless.rawValue == "icon_seamless")
-  #expect(WeatherModel.gem_hrdps_continental.rawValue == "gem_hrdps_continental")
-  #expect(WeatherModel.allCases.count == 3)
+  #expect(WeatherModel.gfsSeamless.rawValue == "gfs_seamless")
+  #expect(WeatherModel.hrrr.rawValue == "ncep_hrrr_conus")
+  #expect(WeatherModel.nbm.rawValue == "ncep_nbm_conus")
+  #expect(WeatherModel.gemGlobal.rawValue == "gem_global")
+  #expect(WeatherModel.gemRegional.rawValue == "gem_regional")
+  #expect(WeatherModel.gemHrdpsContinental.rawValue == "gem_hrdps_continental")
+  #expect(WeatherModel.allCases.count == 9)
 }
 
 @Test func testWindSpeedUnitEnumValues() {
@@ -113,7 +119,7 @@ import Foundation
   #expect(iconData?.windGusts == 2.9)
   #expect(iconData?.windSpeedUnit == "kn")
   
-  let gemData = firstHourly[.gem_hrdps_continental]
+  let gemData = firstHourly[.gemHrdpsContinental]
   #expect(gemData != nil)
   #expect(gemData?.windSpeed == 5.5)
   #expect(gemData?.windDirection == 230)
@@ -182,7 +188,7 @@ import Foundation
   #expect(firstIcon?.windDirection == 256)
   #expect(firstIcon?.windGusts == 2.9)
 
-  let firstGem = firstHourly[.gem_hrdps_continental]
+  let firstGem = firstHourly[.gemHrdpsContinental]
   #expect(firstGem?.windSpeed == 2.0)
   #expect(firstGem?.windDirection == 220)
   #expect(firstGem?.windGusts == 4.0)
@@ -197,7 +203,7 @@ import Foundation
   #expect(secondIcon?.windDirection == 274)
   #expect(secondIcon?.windGusts == 4.9)
 
-  let secondGem = secondHourly[.gem_hrdps_continental]
+  let secondGem = secondHourly[.gemHrdpsContinental]
   #expect(secondGem?.windSpeed == 2.2)
   #expect(secondGem?.windDirection == 225)
   #expect(secondGem?.windGusts == 4.5)
