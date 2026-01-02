@@ -20,6 +20,59 @@ import Foundation
   #expect(WeatherModel.allCases.count == 9)
 }
 
+@Test func testAvailableModelsNewYork() {
+  // New York City - should have all models including CONUS-specific ones
+  let nyModels = WeatherModel.availableModels(latitude: 40.7128, longitude: -74.0060)
+
+  #expect(nyModels.contains(.ecmwfIfs025), "ECMWF should be available globally")
+  #expect(nyModels.contains(.gfsSeamless), "GFS should be available globally")
+  #expect(nyModels.contains(.hrrr), "HRRR should be available in CONUS")
+  #expect(nyModels.contains(.nbm), "NBM should be available in CONUS")
+  #expect(nyModels.contains(.gemRegional), "GEM Regional should cover North America")
+  #expect(nyModels.count == 9, "All 9 models should be available in NYC")
+}
+
+@Test func testAvailableModelsVancouver() {
+  // Vancouver, Canada - should have Canadian models but not HRRR
+  let vanModels = WeatherModel.availableModels(latitude: 49.2827, longitude: -123.1207)
+
+  #expect(vanModels.contains(.ecmwfIfs025), "ECMWF should be available globally")
+  #expect(vanModels.contains(.gemHrdpsContinental), "HRDPS should cover Vancouver")
+  #expect(vanModels.contains(.gemRegional), "GEM Regional should cover Vancouver")
+  #expect(!vanModels.contains(.hrrr), "HRRR should NOT cover Vancouver (outside CONUS)")
+}
+
+@Test func testAvailableModelsLondon() {
+  // London, UK - should only have global models
+  let londonModels = WeatherModel.availableModels(latitude: 51.5074, longitude: -0.1278)
+
+  #expect(londonModels.contains(.ecmwfIfs025), "ECMWF should be available globally")
+  #expect(londonModels.contains(.iconSeamless), "ICON should be available globally")
+  #expect(londonModels.contains(.gfsSeamless), "GFS should be available globally")
+  #expect(!londonModels.contains(.hrrr), "HRRR should NOT cover London")
+  #expect(!londonModels.contains(.nbm), "NBM should NOT cover London")
+  #expect(!londonModels.contains(.gemHrdpsContinental), "HRDPS should NOT cover London")
+  #expect(londonModels.count == 5, "Only 5 global models should be available in London")
+}
+
+@Test func testAvailableModelsTokyo() {
+  // Tokyo, Japan - should only have global models
+  let tokyoModels = WeatherModel.availableModels(latitude: 35.6762, longitude: 139.6503)
+
+  #expect(tokyoModels.contains(.ecmwfIfs025), "ECMWF should be available globally")
+  #expect(!tokyoModels.contains(.hrrr), "HRRR should NOT cover Tokyo")
+  #expect(!tokyoModels.contains(.gemRegional), "GEM Regional should NOT cover Tokyo")
+  #expect(tokyoModels.count == 5, "Only 5 global models should be available in Tokyo")
+}
+
+@Test func testIsAvailableMethod() {
+  // Test individual model availability
+  #expect(WeatherModel.hrrr.isAvailable(latitude: 40.0, longitude: -100.0) == true)
+  #expect(WeatherModel.hrrr.isAvailable(latitude: 51.0, longitude: -0.1) == false)
+  #expect(WeatherModel.gemHrdpsContinental.isAvailable(latitude: 49.0, longitude: -123.0) == true)
+  #expect(WeatherModel.gemHrdpsContinental.isAvailable(latitude: 30.0, longitude: -100.0) == false)
+}
+
 @Test func testWindSpeedUnitEnumValues() {
   #expect(WindSpeedUnit.knots.rawValue == "kn")
   #expect(WindSpeedUnit.kmh.rawValue == "kmh")

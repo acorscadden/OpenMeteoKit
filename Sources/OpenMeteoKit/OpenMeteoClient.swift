@@ -93,6 +93,54 @@ public enum WeatherModel: String, CaseIterable {
 
   // Ensemble models (requires different API endpoint - not yet supported)
   // case gfsEnsemble = "gfs_ensemble_seamless"
+
+  /// Returns whether this model provides coverage for the given coordinates.
+  /// Based on known model domain boundaries.
+  /// - Parameters:
+  ///   - latitude: Latitude in degrees (-90 to 90)
+  ///   - longitude: Longitude in degrees (-180 to 180)
+  /// - Returns: true if the model covers this location
+  public func isAvailable(latitude: Double, longitude: Double) -> Bool {
+    switch self {
+    // Global models - available everywhere
+    case .ecmwfIfs025, .ecmwfAifs025, .iconSeamless, .gfsSeamless, .gemGlobal:
+      return true
+
+    // HRRR - CONUS domain
+    // Source: https://rapidrefresh.noaa.gov/hrrr/HRRR_conus.domain.txt
+    // Approximate bounding box: 21.14°N-47.84°N, 134.10°W-60.90°W
+    case .hrrr:
+      return latitude >= 21.0 && latitude <= 48.0 &&
+             longitude >= -135.0 && longitude <= -60.0
+
+    // NBM - CONUS domain (slightly larger than HRRR, includes parts of Canada/Mexico)
+    // Source: https://vlab.noaa.gov/web/mdl/nbm
+    case .nbm:
+      return latitude >= 20.0 && latitude <= 50.0 &&
+             longitude >= -135.0 && longitude <= -60.0
+
+    // GEM Regional (RDPS) - North America
+    // Source: https://wiki.usask.ca/pages/viewpage.action?pageId=1466958353
+    case .gemRegional:
+      return latitude >= 10.0 && latitude <= 75.0 &&
+             longitude >= -175.0 && longitude <= -40.0
+
+    // GEM HRDPS Continental - Canada and northern US
+    // Source: https://eccc-msc.github.io/open-data/msc-data/nwp_hrdps/readme_hrdps-datamart_en/
+    case .gemHrdpsContinental:
+      return latitude >= 38.0 && latitude <= 70.0 &&
+             longitude >= -143.0 && longitude <= -50.0
+    }
+  }
+
+  /// Returns all models that provide coverage for the given coordinates.
+  /// - Parameters:
+  ///   - latitude: Latitude in degrees (-90 to 90)
+  ///   - longitude: Longitude in degrees (-180 to 180)
+  /// - Returns: Array of available WeatherModel cases
+  public static func availableModels(latitude: Double, longitude: Double) -> [WeatherModel] {
+    return WeatherModel.allCases.filter { $0.isAvailable(latitude: latitude, longitude: longitude) }
+  }
 }
 
 public enum WindSpeedUnit: String, CaseIterable {
