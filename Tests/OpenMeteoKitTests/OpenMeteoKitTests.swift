@@ -86,19 +86,28 @@ import Foundation
   let windOnly: WeatherDataType = .wind
   #expect(windOnly.contains(.wind))
   #expect(!windOnly.contains(.precipitation))
+  #expect(!windOnly.contains(.temperature))
 
   let precipOnly: WeatherDataType = .precipitation
   #expect(!precipOnly.contains(.wind))
   #expect(precipOnly.contains(.precipitation))
+  #expect(!precipOnly.contains(.temperature))
+
+  let tempOnly: WeatherDataType = .temperature
+  #expect(!tempOnly.contains(.wind))
+  #expect(!tempOnly.contains(.precipitation))
+  #expect(tempOnly.contains(.temperature))
 
   // Test combined options
   let both: WeatherDataType = [.wind, .precipitation]
   #expect(both.contains(.wind))
   #expect(both.contains(.precipitation))
+  #expect(!both.contains(.temperature))
 
   // Test .all
   #expect(WeatherDataType.all.contains(.wind))
   #expect(WeatherDataType.all.contains(.precipitation))
+  #expect(WeatherDataType.all.contains(.temperature))
 }
 
 @Test func testWeatherResponseDecoding() throws {
@@ -513,4 +522,225 @@ import Foundation
 
   let secondIcon = secondHourly[.iconSeamless]
   #expect(secondIcon?.weatherCode == 71) // Slight snowfall
+}
+
+@Test func testTemperatureDataDecoding() throws {
+  let jsonString = """
+  {
+    "latitude": 49.25,
+    "longitude": -123.1,
+    "generationtime_ms": 0.5,
+    "utc_offset_seconds": 0,
+    "timezone": "GMT",
+    "timezone_abbreviation": "GMT",
+    "elevation": 70.0,
+    "hourly_units": {
+      "time": "iso8601",
+      "wind_speed_10m_ecmwf_ifs025": "kn",
+      "wind_direction_10m_ecmwf_ifs025": "°",
+      "wind_gusts_10m_ecmwf_ifs025": "kn",
+      "wind_speed_10m_icon_seamless": "kn",
+      "wind_direction_10m_icon_seamless": "°",
+      "wind_gusts_10m_icon_seamless": "kn",
+      "temperature_2m_ecmwf_ifs025": "°C",
+      "temperature_2m_icon_seamless": "°C"
+    },
+    "hourly": {
+      "time": [
+        "2025-12-20T08:00",
+        "2025-12-20T09:00"
+      ],
+      "wind_speed_10m_ecmwf_ifs025": [5.0, 6.0],
+      "wind_direction_10m_ecmwf_ifs025": [180, 190],
+      "wind_gusts_10m_ecmwf_ifs025": [10.0, 12.0],
+      "wind_speed_10m_icon_seamless": [4.5, 5.5],
+      "wind_direction_10m_icon_seamless": [175, 185],
+      "wind_gusts_10m_icon_seamless": [9.0, 11.0],
+      "temperature_2m_ecmwf_ifs025": [15.5, 16.2],
+      "temperature_2m_icon_seamless": [14.8, 15.9]
+    }
+  }
+  """
+
+  let jsonData = jsonString.data(using: .utf8)!
+  let decoder = JSONDecoder()
+  let response = try decoder.decode(OpenMeteoWeatherResponse.self, from: jsonData)
+
+  #expect(response.hourly.count == 2)
+
+  // Test first hour temperature data
+  let firstHourly = response.hourly[0]
+  let ecmwfData = firstHourly[.ecmwfIfs025]
+  #expect(ecmwfData?.temperature == 15.5)
+  #expect(ecmwfData?.temperatureUnit == "°C")
+
+  let iconData = firstHourly[.iconSeamless]
+  #expect(iconData?.temperature == 14.8)
+  #expect(iconData?.temperatureUnit == "°C")
+
+  // Test second hour temperature data
+  let secondHourly = response.hourly[1]
+  let secondEcmwf = secondHourly[.ecmwfIfs025]
+  #expect(secondEcmwf?.temperature == 16.2)
+
+  let secondIcon = secondHourly[.iconSeamless]
+  #expect(secondIcon?.temperature == 15.9)
+}
+
+@Test func testTemperatureWithNullValues() throws {
+  let jsonString = """
+  {
+    "latitude": 49.25,
+    "longitude": -123.1,
+    "generationtime_ms": 0.5,
+    "utc_offset_seconds": 0,
+    "timezone": "GMT",
+    "timezone_abbreviation": "GMT",
+    "elevation": 70.0,
+    "hourly_units": {
+      "time": "iso8601",
+      "wind_speed_10m_ecmwf_ifs025": "kn",
+      "wind_direction_10m_ecmwf_ifs025": "°",
+      "wind_gusts_10m_ecmwf_ifs025": "kn",
+      "temperature_2m_ecmwf_ifs025": "°C"
+    },
+    "hourly": {
+      "time": [
+        "2025-12-20T08:00"
+      ],
+      "wind_speed_10m_ecmwf_ifs025": [5.0],
+      "wind_direction_10m_ecmwf_ifs025": [180],
+      "wind_gusts_10m_ecmwf_ifs025": [10.0],
+      "temperature_2m_ecmwf_ifs025": [null]
+    }
+  }
+  """
+
+  let jsonData = jsonString.data(using: .utf8)!
+  let decoder = JSONDecoder()
+  let response = try decoder.decode(OpenMeteoWeatherResponse.self, from: jsonData)
+
+  let hourly = response.hourly[0]
+  let ecmwfData = hourly[.ecmwfIfs025]
+
+  // Temperature is null, should be nil
+  #expect(ecmwfData?.temperature == nil)
+  // Wind data should still work
+  #expect(ecmwfData?.windSpeed == 5.0)
+}
+
+@Test func testTemperatureForAllModels() throws {
+  let jsonString = """
+  {
+    "latitude": 40.7,
+    "longitude": -74.0,
+    "generationtime_ms": 0.5,
+    "utc_offset_seconds": 0,
+    "timezone": "GMT",
+    "timezone_abbreviation": "GMT",
+    "elevation": 10.0,
+    "hourly_units": {
+      "time": "iso8601",
+      "wind_speed_10m_ecmwf_ifs025": "kn",
+      "wind_direction_10m_ecmwf_ifs025": "°",
+      "wind_gusts_10m_ecmwf_ifs025": "kn",
+      "wind_speed_10m_ecmwf_aifs025": "kn",
+      "wind_direction_10m_ecmwf_aifs025": "°",
+      "wind_gusts_10m_ecmwf_aifs025": "kn",
+      "wind_speed_10m_icon_seamless": "kn",
+      "wind_direction_10m_icon_seamless": "°",
+      "wind_gusts_10m_icon_seamless": "kn",
+      "wind_speed_10m_gfs_seamless": "kn",
+      "wind_direction_10m_gfs_seamless": "°",
+      "wind_gusts_10m_gfs_seamless": "kn",
+      "wind_speed_10m_ncep_hrrr_conus": "kn",
+      "wind_direction_10m_ncep_hrrr_conus": "°",
+      "wind_gusts_10m_ncep_hrrr_conus": "kn",
+      "wind_speed_10m_ncep_nbm_conus": "kn",
+      "wind_direction_10m_ncep_nbm_conus": "°",
+      "wind_gusts_10m_ncep_nbm_conus": "kn",
+      "wind_speed_10m_gem_global": "kn",
+      "wind_direction_10m_gem_global": "°",
+      "wind_gusts_10m_gem_global": "kn",
+      "wind_speed_10m_gem_regional": "kn",
+      "wind_direction_10m_gem_regional": "°",
+      "wind_gusts_10m_gem_regional": "kn",
+      "wind_speed_10m_gem_hrdps_continental": "kn",
+      "wind_direction_10m_gem_hrdps_continental": "°",
+      "wind_gusts_10m_gem_hrdps_continental": "kn",
+      "temperature_2m_ecmwf_ifs025": "°C",
+      "temperature_2m_ecmwf_aifs025": "°C",
+      "temperature_2m_icon_seamless": "°C",
+      "temperature_2m_gfs_seamless": "°C",
+      "temperature_2m_ncep_hrrr_conus": "°C",
+      "temperature_2m_ncep_nbm_conus": "°C",
+      "temperature_2m_gem_global": "°C",
+      "temperature_2m_gem_regional": "°C",
+      "temperature_2m_gem_hrdps_continental": "°C"
+    },
+    "hourly": {
+      "time": [
+        "2025-12-20T08:00"
+      ],
+      "wind_speed_10m_ecmwf_ifs025": [5.0],
+      "wind_direction_10m_ecmwf_ifs025": [180],
+      "wind_gusts_10m_ecmwf_ifs025": [10.0],
+      "wind_speed_10m_ecmwf_aifs025": [5.1],
+      "wind_direction_10m_ecmwf_aifs025": [181],
+      "wind_gusts_10m_ecmwf_aifs025": [10.1],
+      "wind_speed_10m_icon_seamless": [5.2],
+      "wind_direction_10m_icon_seamless": [182],
+      "wind_gusts_10m_icon_seamless": [10.2],
+      "wind_speed_10m_gfs_seamless": [5.3],
+      "wind_direction_10m_gfs_seamless": [183],
+      "wind_gusts_10m_gfs_seamless": [10.3],
+      "wind_speed_10m_ncep_hrrr_conus": [5.4],
+      "wind_direction_10m_ncep_hrrr_conus": [184],
+      "wind_gusts_10m_ncep_hrrr_conus": [10.4],
+      "wind_speed_10m_ncep_nbm_conus": [5.5],
+      "wind_direction_10m_ncep_nbm_conus": [185],
+      "wind_gusts_10m_ncep_nbm_conus": [10.5],
+      "wind_speed_10m_gem_global": [5.6],
+      "wind_direction_10m_gem_global": [186],
+      "wind_gusts_10m_gem_global": [10.6],
+      "wind_speed_10m_gem_regional": [5.7],
+      "wind_direction_10m_gem_regional": [187],
+      "wind_gusts_10m_gem_regional": [10.7],
+      "wind_speed_10m_gem_hrdps_continental": [5.8],
+      "wind_direction_10m_gem_hrdps_continental": [188],
+      "wind_gusts_10m_gem_hrdps_continental": [10.8],
+      "temperature_2m_ecmwf_ifs025": [20.0],
+      "temperature_2m_ecmwf_aifs025": [20.1],
+      "temperature_2m_icon_seamless": [20.2],
+      "temperature_2m_gfs_seamless": [20.3],
+      "temperature_2m_ncep_hrrr_conus": [20.4],
+      "temperature_2m_ncep_nbm_conus": [20.5],
+      "temperature_2m_gem_global": [20.6],
+      "temperature_2m_gem_regional": [20.7],
+      "temperature_2m_gem_hrdps_continental": [20.8]
+    }
+  }
+  """
+
+  let jsonData = jsonString.data(using: .utf8)!
+  let decoder = JSONDecoder()
+  let response = try decoder.decode(OpenMeteoWeatherResponse.self, from: jsonData)
+
+  let hourly = response.hourly[0]
+
+  // Test temperature for all models
+  #expect(hourly[.ecmwfIfs025]?.temperature == 20.0)
+  #expect(hourly[.ecmwfAifs025]?.temperature == 20.1)
+  #expect(hourly[.iconSeamless]?.temperature == 20.2)
+  #expect(hourly[.gfsSeamless]?.temperature == 20.3)
+  #expect(hourly[.hrrr]?.temperature == 20.4)
+  #expect(hourly[.nbm]?.temperature == 20.5)
+  #expect(hourly[.gemGlobal]?.temperature == 20.6)
+  #expect(hourly[.gemRegional]?.temperature == 20.7)
+  #expect(hourly[.gemHrdpsContinental]?.temperature == 20.8)
+
+  // Verify units
+  #expect(hourly[.ecmwfIfs025]?.temperatureUnit == "°C")
+  #expect(hourly[.gfsSeamless]?.temperatureUnit == "°C")
+  #expect(hourly[.hrrr]?.temperatureUnit == "°C")
 }

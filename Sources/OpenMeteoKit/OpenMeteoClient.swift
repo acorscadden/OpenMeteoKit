@@ -60,6 +60,9 @@ public struct OpenMeteoClient {
     if dataTypes.contains(.precipitation) {
       hourlyParams.append(contentsOf: ["precipitation", "rain", "showers", "snowfall", "precipitation_probability", "weather_code"])
     }
+    if dataTypes.contains(.temperature) {
+      hourlyParams.append("temperature_2m")
+    }
 
     components.queryItems = [
       URLQueryItem(name: "latitude", value: String(latitude)),
@@ -159,8 +162,9 @@ public struct WeatherDataType: OptionSet, Sendable {
 
   public static let wind = WeatherDataType(rawValue: 1 << 0)
   public static let precipitation = WeatherDataType(rawValue: 1 << 1)
+  public static let temperature = WeatherDataType(rawValue: 1 << 2)
 
-  public static let all: WeatherDataType = [.wind, .precipitation]
+  public static let all: WeatherDataType = [.wind, .precipitation, .temperature]
 }
 
 public enum OpenMeteoError: Error {
@@ -237,7 +241,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         snowfallUnit: units.snowfallEcmwfIfs025 ?? "cm",
         precipitationProbabilityUnit: units.precipitationProbabilityEcmwfIfs025 ?? "%",
         weatherCode: data.weatherCodeEcmwfIfs025?[safe: index] ?? nil,
-        weatherCodeUnit: units.weatherCodeEcmwfIfs025 ?? "wmo code"
+        weatherCodeUnit: units.weatherCodeEcmwfIfs025 ?? "wmo code",
+        temperature: data.temperature2mEcmwfIfs025?[safe: index] ?? nil,
+        temperatureUnit: units.temperature2mEcmwfIfs025 ?? "°C"
       )
 
       // Icon Seamless data
@@ -259,7 +265,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         snowfallUnit: units.snowfallIconSeamless ?? "cm",
         precipitationProbabilityUnit: units.precipitationProbabilityIconSeamless ?? "%",
         weatherCode: data.weatherCodeIconSeamless?[safe: index] ?? nil,
-        weatherCodeUnit: units.weatherCodeIconSeamless ?? "wmo code"
+        weatherCodeUnit: units.weatherCodeIconSeamless ?? "wmo code",
+        temperature: data.temperature2mIconSeamless?[safe: index] ?? nil,
+        temperatureUnit: units.temperature2mIconSeamless ?? "°C"
       )
 
       // GEM HRDPS Continental data
@@ -281,7 +289,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         snowfallUnit: units.snowfallGemHrdpsContinental ?? "cm",
         precipitationProbabilityUnit: units.precipitationProbabilityGemHrdpsContinental ?? "%",
         weatherCode: data.weatherCodeGemHrdpsContinental?[safe: index] ?? nil,
-        weatherCodeUnit: units.weatherCodeGemHrdpsContinental ?? "wmo code"
+        weatherCodeUnit: units.weatherCodeGemHrdpsContinental ?? "wmo code",
+        temperature: data.temperature2mGemHrdpsContinental?[safe: index] ?? nil,
+        temperatureUnit: units.temperature2mGemHrdpsContinental ?? "°C"
       )
 
       // ECMWF AIFS data
@@ -303,7 +313,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         snowfallUnit: units.snowfallEcmwfAifs025 ?? "cm",
         precipitationProbabilityUnit: units.precipitationProbabilityEcmwfAifs025 ?? "%",
         weatherCode: data.weatherCodeEcmwfAifs025?[safe: index] ?? nil,
-        weatherCodeUnit: units.weatherCodeEcmwfAifs025 ?? "wmo code"
+        weatherCodeUnit: units.weatherCodeEcmwfAifs025 ?? "wmo code",
+        temperature: data.temperature2mEcmwfAifs025?[safe: index] ?? nil,
+        temperatureUnit: units.temperature2mEcmwfAifs025 ?? "°C"
       )
 
       // GFS Seamless data
@@ -325,7 +337,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         snowfallUnit: units.snowfallGfsSeamless ?? "cm",
         precipitationProbabilityUnit: units.precipitationProbabilityGfsSeamless ?? "%",
         weatherCode: data.weatherCodeGfsSeamless?[safe: index] ?? nil,
-        weatherCodeUnit: units.weatherCodeGfsSeamless ?? "wmo code"
+        weatherCodeUnit: units.weatherCodeGfsSeamless ?? "wmo code",
+        temperature: data.temperature2mGfsSeamless?[safe: index] ?? nil,
+        temperatureUnit: units.temperature2mGfsSeamless ?? "°C"
       )
 
       // HRRR data
@@ -347,7 +361,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         snowfallUnit: units.snowfallHrrrConus ?? "cm",
         precipitationProbabilityUnit: units.precipitationProbabilityHrrrConus ?? "%",
         weatherCode: data.weatherCodeHrrrConus?[safe: index] ?? nil,
-        weatherCodeUnit: units.weatherCodeHrrrConus ?? "wmo code"
+        weatherCodeUnit: units.weatherCodeHrrrConus ?? "wmo code",
+        temperature: data.temperature2mHrrrConus?[safe: index] ?? nil,
+        temperatureUnit: units.temperature2mHrrrConus ?? "°C"
       )
 
       // NBM data
@@ -369,7 +385,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         snowfallUnit: units.snowfallNbmConus ?? "cm",
         precipitationProbabilityUnit: units.precipitationProbabilityNbmConus ?? "%",
         weatherCode: data.weatherCodeNbmConus?[safe: index] ?? nil,
-        weatherCodeUnit: units.weatherCodeNbmConus ?? "wmo code"
+        weatherCodeUnit: units.weatherCodeNbmConus ?? "wmo code",
+        temperature: data.temperature2mNbmConus?[safe: index] ?? nil,
+        temperatureUnit: units.temperature2mNbmConus ?? "°C"
       )
 
       // GEM Global data
@@ -391,7 +409,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         snowfallUnit: units.snowfallGemGlobal ?? "cm",
         precipitationProbabilityUnit: units.precipitationProbabilityGemGlobal ?? "%",
         weatherCode: data.weatherCodeGemGlobal?[safe: index] ?? nil,
-        weatherCodeUnit: units.weatherCodeGemGlobal ?? "wmo code"
+        weatherCodeUnit: units.weatherCodeGemGlobal ?? "wmo code",
+        temperature: data.temperature2mGemGlobal?[safe: index] ?? nil,
+        temperatureUnit: units.temperature2mGemGlobal ?? "°C"
       )
 
       // GEM Regional data
@@ -413,7 +433,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         snowfallUnit: units.snowfallGemRegional ?? "cm",
         precipitationProbabilityUnit: units.precipitationProbabilityGemRegional ?? "%",
         weatherCode: data.weatherCodeGemRegional?[safe: index] ?? nil,
-        weatherCodeUnit: units.weatherCodeGemRegional ?? "wmo code"
+        weatherCodeUnit: units.weatherCodeGemRegional ?? "wmo code",
+        temperature: data.temperature2mGemRegional?[safe: index] ?? nil,
+        temperatureUnit: units.temperature2mGemRegional ?? "°C"
       )
 
       return HourlyData(time: date, models: modelData)
@@ -543,6 +565,17 @@ private struct HourlyUnits: Decodable {
   let weatherCodeGemRegional: String?
   let weatherCodeGemHrdpsContinental: String?
 
+  // Temperature units
+  let temperature2mEcmwfIfs025: String?
+  let temperature2mEcmwfAifs025: String?
+  let temperature2mIconSeamless: String?
+  let temperature2mGfsSeamless: String?
+  let temperature2mHrrrConus: String?
+  let temperature2mNbmConus: String?
+  let temperature2mGemGlobal: String?
+  let temperature2mGemRegional: String?
+  let temperature2mGemHrdpsContinental: String?
+
   enum CodingKeys: String, CodingKey {
     case time
 
@@ -664,6 +697,17 @@ private struct HourlyUnits: Decodable {
     case weatherCodeGemGlobal = "weather_code_gem_global"
     case weatherCodeGemRegional = "weather_code_gem_regional"
     case weatherCodeGemHrdpsContinental = "weather_code_gem_hrdps_continental"
+
+    // Temperature
+    case temperature2mEcmwfIfs025 = "temperature_2m_ecmwf_ifs025"
+    case temperature2mEcmwfAifs025 = "temperature_2m_ecmwf_aifs025"
+    case temperature2mIconSeamless = "temperature_2m_icon_seamless"
+    case temperature2mGfsSeamless = "temperature_2m_gfs_seamless"
+    case temperature2mHrrrConus = "temperature_2m_ncep_hrrr_conus"
+    case temperature2mNbmConus = "temperature_2m_ncep_nbm_conus"
+    case temperature2mGemGlobal = "temperature_2m_gem_global"
+    case temperature2mGemRegional = "temperature_2m_gem_regional"
+    case temperature2mGemHrdpsContinental = "temperature_2m_gem_hrdps_continental"
   }
 }
 
@@ -789,6 +833,17 @@ private struct RawHourlyData: Decodable {
   let weatherCodeGemRegional: [Int?]?
   let weatherCodeGemHrdpsContinental: [Int?]?
 
+  // Temperature data
+  let temperature2mEcmwfIfs025: [Double?]?
+  let temperature2mEcmwfAifs025: [Double?]?
+  let temperature2mIconSeamless: [Double?]?
+  let temperature2mGfsSeamless: [Double?]?
+  let temperature2mHrrrConus: [Double?]?
+  let temperature2mNbmConus: [Double?]?
+  let temperature2mGemGlobal: [Double?]?
+  let temperature2mGemRegional: [Double?]?
+  let temperature2mGemHrdpsContinental: [Double?]?
+
   enum CodingKeys: String, CodingKey {
     case time
 
@@ -910,6 +965,17 @@ private struct RawHourlyData: Decodable {
     case weatherCodeGemGlobal = "weather_code_gem_global"
     case weatherCodeGemRegional = "weather_code_gem_regional"
     case weatherCodeGemHrdpsContinental = "weather_code_gem_hrdps_continental"
+
+    // Temperature
+    case temperature2mEcmwfIfs025 = "temperature_2m_ecmwf_ifs025"
+    case temperature2mEcmwfAifs025 = "temperature_2m_ecmwf_aifs025"
+    case temperature2mIconSeamless = "temperature_2m_icon_seamless"
+    case temperature2mGfsSeamless = "temperature_2m_gfs_seamless"
+    case temperature2mHrrrConus = "temperature_2m_ncep_hrrr_conus"
+    case temperature2mNbmConus = "temperature_2m_ncep_nbm_conus"
+    case temperature2mGemGlobal = "temperature_2m_gem_global"
+    case temperature2mGemRegional = "temperature_2m_gem_regional"
+    case temperature2mGemHrdpsContinental = "temperature_2m_gem_hrdps_continental"
   }
 }
 
@@ -946,6 +1012,10 @@ public struct WeatherModelData {
   // Weather condition
   public let weatherCode: Int?
   public let weatherCodeUnit: String?
+
+  // Temperature data
+  public let temperature: Double?
+  public let temperatureUnit: String?
 }
 
 private extension Array {

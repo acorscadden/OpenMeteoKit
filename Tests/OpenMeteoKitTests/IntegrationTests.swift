@@ -74,7 +74,23 @@ import Foundation
       }
     }
 
-    print("✅ Precipitation and weather code data verified")
+    // Verify temperature data is present
+    if let ecmwfData = firstHour[.ecmwfIfs025] {
+      #expect(ecmwfData.temperature != nil, "ECMWF temperature should be present")
+      #expect(ecmwfData.temperatureUnit == "°C", "Temperature unit should be °C")
+    }
+
+    if let iconData = firstHour[.iconSeamless] {
+      #expect(iconData.temperature != nil, "ICON temperature should be present")
+      #expect(iconData.temperatureUnit == "°C", "ICON temperature unit should be °C")
+    }
+
+    if let gemData = firstHour[.gemHrdpsContinental] {
+      #expect(gemData.temperature != nil, "GEM-HRDPS temperature should be present")
+      #expect(gemData.temperatureUnit == "°C", "GEM-HRDPS temperature unit should be °C")
+    }
+
+    print("✅ Precipitation, weather code, and temperature data verified")
 
   } catch {
     print("❌ Error fetching Vancouver weather data: \(error)")
@@ -140,13 +156,93 @@ import Foundation
       // Precipitation data should be nil since we only requested wind
       #expect(ecmwfData.precipitation == nil, "Precipitation should be nil when only wind requested")
       #expect(ecmwfData.weatherCode == nil, "Weather code should be nil when only wind requested")
-      print("✅ Precipitation correctly nil for wind-only request")
+      #expect(ecmwfData.temperature == nil, "Temperature should be nil when only wind requested")
+      print("✅ Precipitation and temperature correctly nil for wind-only request")
     }
 
     print("✅ Wind-only fetch verified")
 
   } catch {
     print("❌ Error fetching wind-only data: \(error)")
+    throw error
+  }
+}
+
+@Test func testFetchTemperatureOnly() async throws {
+  let client = OpenMeteoClient()
+
+  let latitude: Double = 49.2827
+  let longitude: Double = -123.1207
+
+  do {
+    let response = try await client.fetchWeatherData(
+      latitude: latitude,
+      longitude: longitude,
+      models: [.ecmwfIfs025, .iconSeamless],
+      dataTypes: .temperature
+    )
+
+    #expect(!response.hourly.isEmpty, "Hourly data should not be empty")
+    print("📊 Received \(response.hourly.count) hours of data")
+
+    // Check first hour data
+    let firstHour = response.hourly.first!
+    if let ecmwfData = firstHour[.ecmwfIfs025] {
+      // Temperature data should be present
+      #expect(ecmwfData.temperature != nil, "Temperature should be present")
+      #expect(ecmwfData.temperatureUnit == "°C", "Temperature unit should be °C")
+
+      // Wind and precipitation data should be nil since we only requested temperature
+      #expect(ecmwfData.windSpeed == nil, "Wind speed should be nil when only temperature requested")
+      #expect(ecmwfData.precipitation == nil, "Precipitation should be nil when only temperature requested")
+      print("✅ Temperature: \(ecmwfData.temperature!)°C")
+    }
+
+    if let iconData = firstHour[.iconSeamless] {
+      #expect(iconData.temperature != nil, "ICON temperature should be present")
+      #expect(iconData.temperatureUnit == "°C", "ICON temperature unit should be °C")
+    }
+
+    print("✅ Temperature-only fetch verified")
+
+  } catch {
+    print("❌ Error fetching temperature-only data: \(error)")
+    throw error
+  }
+}
+
+@Test func testFetchAllDataTypes() async throws {
+  let client = OpenMeteoClient()
+
+  let latitude: Double = 40.7128
+  let longitude: Double = -74.0060
+
+  do {
+    let response = try await client.fetchWeatherData(
+      latitude: latitude,
+      longitude: longitude,
+      models: [.ecmwfIfs025, .gfsSeamless],
+      dataTypes: .all
+    )
+
+    #expect(!response.hourly.isEmpty, "Hourly data should not be empty")
+
+    // Check first hour data
+    let firstHour = response.hourly.first!
+    if let ecmwfData = firstHour[.ecmwfIfs025] {
+      // All data types should be present
+      #expect(ecmwfData.windSpeed != nil, "Wind speed should be present")
+      #expect(ecmwfData.precipitation != nil || ecmwfData.precipitationUnit == "mm", "Precipitation data should be available")
+      #expect(ecmwfData.temperature != nil, "Temperature should be present")
+      #expect(ecmwfData.temperatureUnit == "°C", "Temperature unit should be °C")
+
+      print("✅ All data types present - Wind: \(ecmwfData.windSpeed!) kn, Temp: \(ecmwfData.temperature!)°C")
+    }
+
+    print("✅ All data types fetch verified")
+
+  } catch {
+    print("❌ Error fetching all data types: \(error)")
     throw error
   }
 }
