@@ -87,6 +87,7 @@ import Foundation
   #expect(windOnly.contains(.wind))
   #expect(!windOnly.contains(.precipitation))
   #expect(!windOnly.contains(.temperature))
+  #expect(!windOnly.contains(.freezingLevel))
 
   let precipOnly: WeatherDataType = .precipitation
   #expect(!precipOnly.contains(.wind))
@@ -98,6 +99,12 @@ import Foundation
   #expect(!tempOnly.contains(.precipitation))
   #expect(tempOnly.contains(.temperature))
 
+  let freezingOnly: WeatherDataType = .freezingLevel
+  #expect(!freezingOnly.contains(.wind))
+  #expect(!freezingOnly.contains(.precipitation))
+  #expect(!freezingOnly.contains(.temperature))
+  #expect(freezingOnly.contains(.freezingLevel))
+
   // Test combined options
   let both: WeatherDataType = [.wind, .precipitation]
   #expect(both.contains(.wind))
@@ -108,6 +115,7 @@ import Foundation
   #expect(WeatherDataType.all.contains(.wind))
   #expect(WeatherDataType.all.contains(.precipitation))
   #expect(WeatherDataType.all.contains(.temperature))
+  #expect(WeatherDataType.all.contains(.freezingLevel))
 }
 
 @Test func testWeatherResponseDecoding() throws {
@@ -743,4 +751,162 @@ import Foundation
   #expect(hourly[.ecmwfIfs025]?.temperatureUnit == "°C")
   #expect(hourly[.gfsSeamless]?.temperatureUnit == "°C")
   #expect(hourly[.hrrr]?.temperatureUnit == "°C")
+}
+
+@Test func testFreezingLevelHeightDecoding() throws {
+  let jsonString = """
+  {
+    "latitude": 49.25,
+    "longitude": -123.1,
+    "generationtime_ms": 0.5,
+    "utc_offset_seconds": 0,
+    "timezone": "GMT",
+    "timezone_abbreviation": "GMT",
+    "elevation": 70.0,
+    "hourly_units": {
+      "time": "iso8601",
+      "wind_speed_10m_gfs_seamless": "kn",
+      "wind_direction_10m_gfs_seamless": "°",
+      "wind_gusts_10m_gfs_seamless": "kn",
+      "wind_speed_10m_icon_seamless": "kn",
+      "wind_direction_10m_icon_seamless": "°",
+      "wind_gusts_10m_icon_seamless": "kn",
+      "freezing_level_height_gfs_seamless": "m",
+      "freezing_level_height_icon_seamless": "m"
+    },
+    "hourly": {
+      "time": [
+        "2025-12-20T08:00",
+        "2025-12-20T09:00"
+      ],
+      "wind_speed_10m_gfs_seamless": [5.0, 6.0],
+      "wind_direction_10m_gfs_seamless": [180, 190],
+      "wind_gusts_10m_gfs_seamless": [10.0, 12.0],
+      "wind_speed_10m_icon_seamless": [4.5, 5.5],
+      "wind_direction_10m_icon_seamless": [175, 185],
+      "wind_gusts_10m_icon_seamless": [9.0, 11.0],
+      "freezing_level_height_gfs_seamless": [2150.5, 2200.0],
+      "freezing_level_height_icon_seamless": [2100.0, 2180.5]
+    }
+  }
+  """
+
+  let jsonData = jsonString.data(using: .utf8)!
+  let decoder = JSONDecoder()
+  let response = try decoder.decode(OpenMeteoWeatherResponse.self, from: jsonData)
+
+  #expect(response.hourly.count == 2)
+
+  // Test first hour freezing level data
+  let firstHourly = response.hourly[0]
+  let gfsData = firstHourly[.gfsSeamless]
+  #expect(gfsData?.freezingLevelHeight == 2150.5)
+  #expect(gfsData?.freezingLevelHeightUnit == "m")
+
+  let iconData = firstHourly[.iconSeamless]
+  #expect(iconData?.freezingLevelHeight == 2100.0)
+  #expect(iconData?.freezingLevelHeightUnit == "m")
+
+  // Test second hour freezing level data
+  let secondHourly = response.hourly[1]
+  let secondGfs = secondHourly[.gfsSeamless]
+  #expect(secondGfs?.freezingLevelHeight == 2200.0)
+
+  let secondIcon = secondHourly[.iconSeamless]
+  #expect(secondIcon?.freezingLevelHeight == 2180.5)
+}
+
+@Test func testFreezingLevelHeightNilForUnsupportedModels() throws {
+  // Test that models which don't support freezing level height return nil
+  let jsonString = """
+  {
+    "latitude": 49.25,
+    "longitude": -123.1,
+    "generationtime_ms": 0.5,
+    "utc_offset_seconds": 0,
+    "timezone": "GMT",
+    "timezone_abbreviation": "GMT",
+    "elevation": 70.0,
+    "hourly_units": {
+      "time": "iso8601",
+      "wind_speed_10m_ecmwf_ifs025": "kn",
+      "wind_direction_10m_ecmwf_ifs025": "°",
+      "wind_gusts_10m_ecmwf_ifs025": "kn",
+      "wind_speed_10m_gfs_seamless": "kn",
+      "wind_direction_10m_gfs_seamless": "°",
+      "wind_gusts_10m_gfs_seamless": "kn",
+      "freezing_level_height_gfs_seamless": "m"
+    },
+    "hourly": {
+      "time": [
+        "2025-12-20T08:00"
+      ],
+      "wind_speed_10m_ecmwf_ifs025": [5.0],
+      "wind_direction_10m_ecmwf_ifs025": [180],
+      "wind_gusts_10m_ecmwf_ifs025": [10.0],
+      "wind_speed_10m_gfs_seamless": [5.0],
+      "wind_direction_10m_gfs_seamless": [180],
+      "wind_gusts_10m_gfs_seamless": [10.0],
+      "freezing_level_height_gfs_seamless": [2500.0]
+    }
+  }
+  """
+
+  let jsonData = jsonString.data(using: .utf8)!
+  let decoder = JSONDecoder()
+  let response = try decoder.decode(OpenMeteoWeatherResponse.self, from: jsonData)
+
+  let hourly = response.hourly[0]
+
+  // GFS should have freezing level data
+  let gfsData = hourly[.gfsSeamless]
+  #expect(gfsData?.freezingLevelHeight == 2500.0)
+  #expect(gfsData?.freezingLevelHeightUnit == "m")
+
+  // ECMWF doesn't support freezing level - should be nil
+  let ecmwfData = hourly[.ecmwfIfs025]
+  #expect(ecmwfData?.freezingLevelHeight == nil)
+  #expect(ecmwfData?.freezingLevelHeightUnit == nil)
+}
+
+@Test func testFreezingLevelHeightWithNullValues() throws {
+  let jsonString = """
+  {
+    "latitude": 49.25,
+    "longitude": -123.1,
+    "generationtime_ms": 0.5,
+    "utc_offset_seconds": 0,
+    "timezone": "GMT",
+    "timezone_abbreviation": "GMT",
+    "elevation": 70.0,
+    "hourly_units": {
+      "time": "iso8601",
+      "wind_speed_10m_gfs_seamless": "kn",
+      "wind_direction_10m_gfs_seamless": "°",
+      "wind_gusts_10m_gfs_seamless": "kn",
+      "freezing_level_height_gfs_seamless": "m"
+    },
+    "hourly": {
+      "time": [
+        "2025-12-20T08:00"
+      ],
+      "wind_speed_10m_gfs_seamless": [5.0],
+      "wind_direction_10m_gfs_seamless": [180],
+      "wind_gusts_10m_gfs_seamless": [10.0],
+      "freezing_level_height_gfs_seamless": [null]
+    }
+  }
+  """
+
+  let jsonData = jsonString.data(using: .utf8)!
+  let decoder = JSONDecoder()
+  let response = try decoder.decode(OpenMeteoWeatherResponse.self, from: jsonData)
+
+  let hourly = response.hourly[0]
+  let gfsData = hourly[.gfsSeamless]
+
+  // Freezing level is null, should be nil
+  #expect(gfsData?.freezingLevelHeight == nil)
+  // Wind data should still work
+  #expect(gfsData?.windSpeed == 5.0)
 }

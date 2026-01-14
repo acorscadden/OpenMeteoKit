@@ -63,6 +63,9 @@ public struct OpenMeteoClient {
     if dataTypes.contains(.temperature) {
       hourlyParams.append("temperature_2m")
     }
+    if dataTypes.contains(.freezingLevel) {
+      hourlyParams.append("freezing_level_height")
+    }
 
     components.queryItems = [
       URLQueryItem(name: "latitude", value: String(latitude)),
@@ -163,8 +166,9 @@ public struct WeatherDataType: OptionSet, Sendable {
   public static let wind = WeatherDataType(rawValue: 1 << 0)
   public static let precipitation = WeatherDataType(rawValue: 1 << 1)
   public static let temperature = WeatherDataType(rawValue: 1 << 2)
+  public static let freezingLevel = WeatherDataType(rawValue: 1 << 3)
 
-  public static let all: WeatherDataType = [.wind, .precipitation, .temperature]
+  public static let all: WeatherDataType = [.wind, .precipitation, .temperature, .freezingLevel]
 }
 
 public enum OpenMeteoError: Error {
@@ -243,7 +247,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         weatherCode: data.weatherCodeEcmwfIfs025?[safe: index] ?? nil,
         weatherCodeUnit: units.weatherCodeEcmwfIfs025 ?? "wmo code",
         temperature: data.temperature2mEcmwfIfs025?[safe: index] ?? nil,
-        temperatureUnit: units.temperature2mEcmwfIfs025 ?? "°C"
+        temperatureUnit: units.temperature2mEcmwfIfs025 ?? "°C",
+        freezingLevelHeight: nil,
+        freezingLevelHeightUnit: nil
       )
 
       // Icon Seamless data
@@ -267,7 +273,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         weatherCode: data.weatherCodeIconSeamless?[safe: index] ?? nil,
         weatherCodeUnit: units.weatherCodeIconSeamless ?? "wmo code",
         temperature: data.temperature2mIconSeamless?[safe: index] ?? nil,
-        temperatureUnit: units.temperature2mIconSeamless ?? "°C"
+        temperatureUnit: units.temperature2mIconSeamless ?? "°C",
+        freezingLevelHeight: data.freezingLevelHeightIconSeamless?[safe: index] ?? nil,
+        freezingLevelHeightUnit: units.freezingLevelHeightIconSeamless ?? "m"
       )
 
       // GEM HRDPS Continental data
@@ -291,7 +299,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         weatherCode: data.weatherCodeGemHrdpsContinental?[safe: index] ?? nil,
         weatherCodeUnit: units.weatherCodeGemHrdpsContinental ?? "wmo code",
         temperature: data.temperature2mGemHrdpsContinental?[safe: index] ?? nil,
-        temperatureUnit: units.temperature2mGemHrdpsContinental ?? "°C"
+        temperatureUnit: units.temperature2mGemHrdpsContinental ?? "°C",
+        freezingLevelHeight: nil,
+        freezingLevelHeightUnit: nil
       )
 
       // ECMWF AIFS data
@@ -315,7 +325,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         weatherCode: data.weatherCodeEcmwfAifs025?[safe: index] ?? nil,
         weatherCodeUnit: units.weatherCodeEcmwfAifs025 ?? "wmo code",
         temperature: data.temperature2mEcmwfAifs025?[safe: index] ?? nil,
-        temperatureUnit: units.temperature2mEcmwfAifs025 ?? "°C"
+        temperatureUnit: units.temperature2mEcmwfAifs025 ?? "°C",
+        freezingLevelHeight: nil,
+        freezingLevelHeightUnit: nil
       )
 
       // GFS Seamless data
@@ -339,7 +351,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         weatherCode: data.weatherCodeGfsSeamless?[safe: index] ?? nil,
         weatherCodeUnit: units.weatherCodeGfsSeamless ?? "wmo code",
         temperature: data.temperature2mGfsSeamless?[safe: index] ?? nil,
-        temperatureUnit: units.temperature2mGfsSeamless ?? "°C"
+        temperatureUnit: units.temperature2mGfsSeamless ?? "°C",
+        freezingLevelHeight: data.freezingLevelHeightGfsSeamless?[safe: index] ?? nil,
+        freezingLevelHeightUnit: units.freezingLevelHeightGfsSeamless ?? "m"
       )
 
       // HRRR data
@@ -363,7 +377,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         weatherCode: data.weatherCodeHrrrConus?[safe: index] ?? nil,
         weatherCodeUnit: units.weatherCodeHrrrConus ?? "wmo code",
         temperature: data.temperature2mHrrrConus?[safe: index] ?? nil,
-        temperatureUnit: units.temperature2mHrrrConus ?? "°C"
+        temperatureUnit: units.temperature2mHrrrConus ?? "°C",
+        freezingLevelHeight: nil,
+        freezingLevelHeightUnit: nil
       )
 
       // NBM data
@@ -387,7 +403,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         weatherCode: data.weatherCodeNbmConus?[safe: index] ?? nil,
         weatherCodeUnit: units.weatherCodeNbmConus ?? "wmo code",
         temperature: data.temperature2mNbmConus?[safe: index] ?? nil,
-        temperatureUnit: units.temperature2mNbmConus ?? "°C"
+        temperatureUnit: units.temperature2mNbmConus ?? "°C",
+        freezingLevelHeight: nil,
+        freezingLevelHeightUnit: nil
       )
 
       // GEM Global data
@@ -411,7 +429,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         weatherCode: data.weatherCodeGemGlobal?[safe: index] ?? nil,
         weatherCodeUnit: units.weatherCodeGemGlobal ?? "wmo code",
         temperature: data.temperature2mGemGlobal?[safe: index] ?? nil,
-        temperatureUnit: units.temperature2mGemGlobal ?? "°C"
+        temperatureUnit: units.temperature2mGemGlobal ?? "°C",
+        freezingLevelHeight: nil,
+        freezingLevelHeightUnit: nil
       )
 
       // GEM Regional data
@@ -435,7 +455,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         weatherCode: data.weatherCodeGemRegional?[safe: index] ?? nil,
         weatherCodeUnit: units.weatherCodeGemRegional ?? "wmo code",
         temperature: data.temperature2mGemRegional?[safe: index] ?? nil,
-        temperatureUnit: units.temperature2mGemRegional ?? "°C"
+        temperatureUnit: units.temperature2mGemRegional ?? "°C",
+        freezingLevelHeight: nil,
+        freezingLevelHeightUnit: nil
       )
 
       return HourlyData(time: date, models: modelData)
@@ -576,6 +598,10 @@ private struct HourlyUnits: Decodable {
   let temperature2mGemRegional: String?
   let temperature2mGemHrdpsContinental: String?
 
+  // Freezing level height units (only supported by GFS and ICON)
+  let freezingLevelHeightIconSeamless: String?
+  let freezingLevelHeightGfsSeamless: String?
+
   enum CodingKeys: String, CodingKey {
     case time
 
@@ -708,6 +734,10 @@ private struct HourlyUnits: Decodable {
     case temperature2mGemGlobal = "temperature_2m_gem_global"
     case temperature2mGemRegional = "temperature_2m_gem_regional"
     case temperature2mGemHrdpsContinental = "temperature_2m_gem_hrdps_continental"
+
+    // Freezing level height (only GFS and ICON)
+    case freezingLevelHeightIconSeamless = "freezing_level_height_icon_seamless"
+    case freezingLevelHeightGfsSeamless = "freezing_level_height_gfs_seamless"
   }
 }
 
@@ -844,6 +874,10 @@ private struct RawHourlyData: Decodable {
   let temperature2mGemRegional: [Double?]?
   let temperature2mGemHrdpsContinental: [Double?]?
 
+  // Freezing level height data (only supported by GFS and ICON)
+  let freezingLevelHeightIconSeamless: [Double?]?
+  let freezingLevelHeightGfsSeamless: [Double?]?
+
   enum CodingKeys: String, CodingKey {
     case time
 
@@ -976,6 +1010,10 @@ private struct RawHourlyData: Decodable {
     case temperature2mGemGlobal = "temperature_2m_gem_global"
     case temperature2mGemRegional = "temperature_2m_gem_regional"
     case temperature2mGemHrdpsContinental = "temperature_2m_gem_hrdps_continental"
+
+    // Freezing level height (only GFS and ICON)
+    case freezingLevelHeightIconSeamless = "freezing_level_height_icon_seamless"
+    case freezingLevelHeightGfsSeamless = "freezing_level_height_gfs_seamless"
   }
 }
 
@@ -1016,6 +1054,10 @@ public struct WeatherModelData {
   // Temperature data
   public let temperature: Double?
   public let temperatureUnit: String?
+
+  // Freezing level height (altitude of 0°C level, only available for GFS and ICON models)
+  public let freezingLevelHeight: Double?
+  public let freezingLevelHeightUnit: String?
 }
 
 private extension Array {
