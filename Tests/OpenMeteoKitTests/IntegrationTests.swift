@@ -373,6 +373,50 @@ import Foundation
   print("✅ Fetched \(response.hourly.count) freezing level data points for Vancouver")
 }
 
+@Test func testFetchCloudCoverOnly() async throws {
+  let client = OpenMeteoClient()
+
+  let latitude: Double = 49.2827
+  let longitude: Double = -123.1207
+
+  do {
+    let response = try await client.fetchWeatherData(
+      latitude: latitude,
+      longitude: longitude,
+      models: [.ecmwfIfs025, .iconSeamless],
+      dataTypes: .cloudCover
+    )
+
+    #expect(!response.hourly.isEmpty, "Hourly data should not be empty")
+
+    let firstHour = response.hourly.first!
+    if let ecmwfData = firstHour[.ecmwfIfs025] {
+      // Cloud cover data should be present
+      #expect(ecmwfData.cloudCover != nil, "ECMWF cloud cover should be present")
+      #expect(ecmwfData.cloudCoverUnit == "%", "Cloud cover unit should be %")
+
+      // Wind and precipitation data should be nil since we only requested cloud cover
+      #expect(ecmwfData.windSpeed == nil, "Wind speed should be nil when only cloud cover requested")
+      #expect(ecmwfData.precipitation == nil, "Precipitation should be nil when only cloud cover requested")
+
+      if let cc = ecmwfData.cloudCover {
+        #expect(cc >= 0 && cc <= 100, "Cloud cover should be 0-100%, got \(cc)")
+      }
+    }
+
+    if let iconData = firstHour[.iconSeamless] {
+      #expect(iconData.cloudCover != nil, "ICON cloud cover should be present")
+      #expect(iconData.cloudCoverUnit == "%", "ICON cloud cover unit should be %")
+    }
+
+    print("✅ Cloud cover-only fetch verified")
+
+  } catch {
+    print("❌ Error fetching cloud cover-only data: \(error)")
+    throw error
+  }
+}
+
 @Test func testAllModelsAtOnce() async throws {
   let client = OpenMeteoClient()
   // Use US coordinates since some models only cover CONUS

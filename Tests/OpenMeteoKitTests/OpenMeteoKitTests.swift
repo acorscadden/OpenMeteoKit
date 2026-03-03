@@ -105,6 +105,13 @@ import Foundation
   #expect(!freezingOnly.contains(.temperature))
   #expect(freezingOnly.contains(.freezingLevel))
 
+  let cloudCoverOnly: WeatherDataType = .cloudCover
+  #expect(!cloudCoverOnly.contains(.wind))
+  #expect(!cloudCoverOnly.contains(.precipitation))
+  #expect(!cloudCoverOnly.contains(.temperature))
+  #expect(!cloudCoverOnly.contains(.freezingLevel))
+  #expect(cloudCoverOnly.contains(.cloudCover))
+
   // Test combined options
   let both: WeatherDataType = [.wind, .precipitation]
   #expect(both.contains(.wind))
@@ -116,6 +123,7 @@ import Foundation
   #expect(WeatherDataType.all.contains(.precipitation))
   #expect(WeatherDataType.all.contains(.temperature))
   #expect(WeatherDataType.all.contains(.freezingLevel))
+  #expect(WeatherDataType.all.contains(.cloudCover))
 }
 
 @Test func testWeatherResponseDecoding() throws {
@@ -909,6 +917,111 @@ import Foundation
   #expect(gfsData?.freezingLevelHeight == nil)
   // Wind data should still work
   #expect(gfsData?.windSpeed == 5.0)
+}
+
+@Test func testCloudCoverDecoding() throws {
+  let jsonString = """
+  {
+    "latitude": 49.25,
+    "longitude": -123.1,
+    "generationtime_ms": 0.5,
+    "utc_offset_seconds": 0,
+    "timezone": "GMT",
+    "timezone_abbreviation": "GMT",
+    "elevation": 70.0,
+    "hourly_units": {
+      "time": "iso8601",
+      "wind_speed_10m_ecmwf_ifs025": "kn",
+      "wind_direction_10m_ecmwf_ifs025": "°",
+      "wind_gusts_10m_ecmwf_ifs025": "kn",
+      "wind_speed_10m_icon_seamless": "kn",
+      "wind_direction_10m_icon_seamless": "°",
+      "wind_gusts_10m_icon_seamless": "kn",
+      "cloud_cover_ecmwf_ifs025": "%",
+      "cloud_cover_icon_seamless": "%"
+    },
+    "hourly": {
+      "time": [
+        "2025-12-20T08:00",
+        "2025-12-20T09:00"
+      ],
+      "wind_speed_10m_ecmwf_ifs025": [5.0, 6.0],
+      "wind_direction_10m_ecmwf_ifs025": [180, 190],
+      "wind_gusts_10m_ecmwf_ifs025": [10.0, 12.0],
+      "wind_speed_10m_icon_seamless": [4.5, 5.5],
+      "wind_direction_10m_icon_seamless": [175, 185],
+      "wind_gusts_10m_icon_seamless": [9.0, 11.0],
+      "cloud_cover_ecmwf_ifs025": [75, 50],
+      "cloud_cover_icon_seamless": [80, 45]
+    }
+  }
+  """
+
+  let jsonData = jsonString.data(using: .utf8)!
+  let decoder = JSONDecoder()
+  let response = try decoder.decode(OpenMeteoWeatherResponse.self, from: jsonData)
+
+  #expect(response.hourly.count == 2)
+
+  // Test first hour cloud cover data
+  let firstHourly = response.hourly[0]
+  let ecmwfData = firstHourly[.ecmwfIfs025]
+  #expect(ecmwfData?.cloudCover == 75)
+  #expect(ecmwfData?.cloudCoverUnit == "%")
+
+  let iconData = firstHourly[.iconSeamless]
+  #expect(iconData?.cloudCover == 80)
+  #expect(iconData?.cloudCoverUnit == "%")
+
+  // Test second hour cloud cover data
+  let secondHourly = response.hourly[1]
+  let secondEcmwf = secondHourly[.ecmwfIfs025]
+  #expect(secondEcmwf?.cloudCover == 50)
+
+  let secondIcon = secondHourly[.iconSeamless]
+  #expect(secondIcon?.cloudCover == 45)
+}
+
+@Test func testCloudCoverWithNullValues() throws {
+  let jsonString = """
+  {
+    "latitude": 49.25,
+    "longitude": -123.1,
+    "generationtime_ms": 0.5,
+    "utc_offset_seconds": 0,
+    "timezone": "GMT",
+    "timezone_abbreviation": "GMT",
+    "elevation": 70.0,
+    "hourly_units": {
+      "time": "iso8601",
+      "wind_speed_10m_ecmwf_ifs025": "kn",
+      "wind_direction_10m_ecmwf_ifs025": "°",
+      "wind_gusts_10m_ecmwf_ifs025": "kn",
+      "cloud_cover_ecmwf_ifs025": "%"
+    },
+    "hourly": {
+      "time": [
+        "2025-12-20T08:00"
+      ],
+      "wind_speed_10m_ecmwf_ifs025": [5.0],
+      "wind_direction_10m_ecmwf_ifs025": [180],
+      "wind_gusts_10m_ecmwf_ifs025": [10.0],
+      "cloud_cover_ecmwf_ifs025": [null]
+    }
+  }
+  """
+
+  let jsonData = jsonString.data(using: .utf8)!
+  let decoder = JSONDecoder()
+  let response = try decoder.decode(OpenMeteoWeatherResponse.self, from: jsonData)
+
+  let hourly = response.hourly[0]
+  let ecmwfData = hourly[.ecmwfIfs025]
+
+  // Cloud cover is null, should be nil
+  #expect(ecmwfData?.cloudCover == nil)
+  // Wind data should still work
+  #expect(ecmwfData?.windSpeed == 5.0)
 }
 
 // MARK: - Standalone Freezing Level Endpoint Tests

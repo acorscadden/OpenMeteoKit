@@ -92,6 +92,9 @@ public struct OpenMeteoClient {
     if dataTypes.contains(.freezingLevel) {
       hourlyParams.append("freezing_level_height")
     }
+    if dataTypes.contains(.cloudCover) {
+      hourlyParams.append("cloud_cover")
+    }
 
     components.queryItems = [
       URLQueryItem(name: "latitude", value: String(latitude)),
@@ -229,8 +232,9 @@ public struct WeatherDataType: OptionSet, Sendable {
   public static let precipitation = WeatherDataType(rawValue: 1 << 1)
   public static let temperature = WeatherDataType(rawValue: 1 << 2)
   public static let freezingLevel = WeatherDataType(rawValue: 1 << 3)
+  public static let cloudCover = WeatherDataType(rawValue: 1 << 4)
 
-  public static let all: WeatherDataType = [.wind, .precipitation, .temperature, .freezingLevel]
+  public static let all: WeatherDataType = [.wind, .precipitation, .temperature, .freezingLevel, .cloudCover]
 }
 
 public enum OpenMeteoError: Error {
@@ -311,7 +315,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         temperature: data.temperature2mEcmwfIfs025?[safe: index] ?? nil,
         temperatureUnit: units.temperature2mEcmwfIfs025 ?? "°C",
         freezingLevelHeight: nil,
-        freezingLevelHeightUnit: nil
+        freezingLevelHeightUnit: nil,
+        cloudCover: data.cloudCoverEcmwfIfs025?[safe: index] ?? nil,
+        cloudCoverUnit: units.cloudCoverEcmwfIfs025 ?? "%"
       )
 
       // Icon Seamless data
@@ -337,7 +343,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         temperature: data.temperature2mIconSeamless?[safe: index] ?? nil,
         temperatureUnit: units.temperature2mIconSeamless ?? "°C",
         freezingLevelHeight: data.freezingLevelHeightIconSeamless?[safe: index] ?? nil,
-        freezingLevelHeightUnit: units.freezingLevelHeightIconSeamless ?? "m"
+        freezingLevelHeightUnit: units.freezingLevelHeightIconSeamless ?? "m",
+        cloudCover: data.cloudCoverIconSeamless?[safe: index] ?? nil,
+        cloudCoverUnit: units.cloudCoverIconSeamless ?? "%"
       )
 
       // GEM HRDPS Continental data
@@ -363,7 +371,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         temperature: data.temperature2mGemHrdpsContinental?[safe: index] ?? nil,
         temperatureUnit: units.temperature2mGemHrdpsContinental ?? "°C",
         freezingLevelHeight: nil,
-        freezingLevelHeightUnit: nil
+        freezingLevelHeightUnit: nil,
+        cloudCover: data.cloudCoverGemHrdpsContinental?[safe: index] ?? nil,
+        cloudCoverUnit: units.cloudCoverGemHrdpsContinental ?? "%"
       )
 
       // ECMWF AIFS data
@@ -389,7 +399,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         temperature: data.temperature2mEcmwfAifs025?[safe: index] ?? nil,
         temperatureUnit: units.temperature2mEcmwfAifs025 ?? "°C",
         freezingLevelHeight: nil,
-        freezingLevelHeightUnit: nil
+        freezingLevelHeightUnit: nil,
+        cloudCover: data.cloudCoverEcmwfAifs025?[safe: index] ?? nil,
+        cloudCoverUnit: units.cloudCoverEcmwfAifs025 ?? "%"
       )
 
       // GFS Seamless data
@@ -415,7 +427,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         temperature: data.temperature2mGfsSeamless?[safe: index] ?? nil,
         temperatureUnit: units.temperature2mGfsSeamless ?? "°C",
         freezingLevelHeight: data.freezingLevelHeightGfsSeamless?[safe: index] ?? nil,
-        freezingLevelHeightUnit: units.freezingLevelHeightGfsSeamless ?? "m"
+        freezingLevelHeightUnit: units.freezingLevelHeightGfsSeamless ?? "m",
+        cloudCover: data.cloudCoverGfsSeamless?[safe: index] ?? nil,
+        cloudCoverUnit: units.cloudCoverGfsSeamless ?? "%"
       )
 
       // HRRR data
@@ -441,7 +455,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         temperature: data.temperature2mHrrrConus?[safe: index] ?? nil,
         temperatureUnit: units.temperature2mHrrrConus ?? "°C",
         freezingLevelHeight: nil,
-        freezingLevelHeightUnit: nil
+        freezingLevelHeightUnit: nil,
+        cloudCover: data.cloudCoverHrrrConus?[safe: index] ?? nil,
+        cloudCoverUnit: units.cloudCoverHrrrConus ?? "%"
       )
 
       // NBM data
@@ -467,7 +483,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         temperature: data.temperature2mNbmConus?[safe: index] ?? nil,
         temperatureUnit: units.temperature2mNbmConus ?? "°C",
         freezingLevelHeight: nil,
-        freezingLevelHeightUnit: nil
+        freezingLevelHeightUnit: nil,
+        cloudCover: data.cloudCoverNbmConus?[safe: index] ?? nil,
+        cloudCoverUnit: units.cloudCoverNbmConus ?? "%"
       )
 
       // GEM Global data
@@ -493,7 +511,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         temperature: data.temperature2mGemGlobal?[safe: index] ?? nil,
         temperatureUnit: units.temperature2mGemGlobal ?? "°C",
         freezingLevelHeight: nil,
-        freezingLevelHeightUnit: nil
+        freezingLevelHeightUnit: nil,
+        cloudCover: data.cloudCoverGemGlobal?[safe: index] ?? nil,
+        cloudCoverUnit: units.cloudCoverGemGlobal ?? "%"
       )
 
       // GEM Regional data
@@ -519,7 +539,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         temperature: data.temperature2mGemRegional?[safe: index] ?? nil,
         temperatureUnit: units.temperature2mGemRegional ?? "°C",
         freezingLevelHeight: nil,
-        freezingLevelHeightUnit: nil
+        freezingLevelHeightUnit: nil,
+        cloudCover: data.cloudCoverGemRegional?[safe: index] ?? nil,
+        cloudCoverUnit: units.cloudCoverGemRegional ?? "%"
       )
 
       return HourlyData(time: date, models: modelData)
@@ -664,6 +686,17 @@ private struct HourlyUnits: Decodable {
   let freezingLevelHeightIconSeamless: String?
   let freezingLevelHeightGfsSeamless: String?
 
+  // Cloud cover units
+  let cloudCoverEcmwfIfs025: String?
+  let cloudCoverEcmwfAifs025: String?
+  let cloudCoverIconSeamless: String?
+  let cloudCoverGfsSeamless: String?
+  let cloudCoverHrrrConus: String?
+  let cloudCoverNbmConus: String?
+  let cloudCoverGemGlobal: String?
+  let cloudCoverGemRegional: String?
+  let cloudCoverGemHrdpsContinental: String?
+
   enum CodingKeys: String, CodingKey {
     case time
 
@@ -800,6 +833,17 @@ private struct HourlyUnits: Decodable {
     // Freezing level height (only GFS and ICON)
     case freezingLevelHeightIconSeamless = "freezing_level_height_icon_seamless"
     case freezingLevelHeightGfsSeamless = "freezing_level_height_gfs_seamless"
+
+    // Cloud cover
+    case cloudCoverEcmwfIfs025 = "cloud_cover_ecmwf_ifs025"
+    case cloudCoverEcmwfAifs025 = "cloud_cover_ecmwf_aifs025"
+    case cloudCoverIconSeamless = "cloud_cover_icon_seamless"
+    case cloudCoverGfsSeamless = "cloud_cover_gfs_seamless"
+    case cloudCoverHrrrConus = "cloud_cover_ncep_hrrr_conus"
+    case cloudCoverNbmConus = "cloud_cover_ncep_nbm_conus"
+    case cloudCoverGemGlobal = "cloud_cover_gem_global"
+    case cloudCoverGemRegional = "cloud_cover_gem_regional"
+    case cloudCoverGemHrdpsContinental = "cloud_cover_gem_hrdps_continental"
   }
 }
 
@@ -940,6 +984,17 @@ private struct RawHourlyData: Decodable {
   let freezingLevelHeightIconSeamless: [Double?]?
   let freezingLevelHeightGfsSeamless: [Double?]?
 
+  // Cloud cover data
+  let cloudCoverEcmwfIfs025: [Int?]?
+  let cloudCoverEcmwfAifs025: [Int?]?
+  let cloudCoverIconSeamless: [Int?]?
+  let cloudCoverGfsSeamless: [Int?]?
+  let cloudCoverHrrrConus: [Int?]?
+  let cloudCoverNbmConus: [Int?]?
+  let cloudCoverGemGlobal: [Int?]?
+  let cloudCoverGemRegional: [Int?]?
+  let cloudCoverGemHrdpsContinental: [Int?]?
+
   enum CodingKeys: String, CodingKey {
     case time
 
@@ -1076,6 +1131,17 @@ private struct RawHourlyData: Decodable {
     // Freezing level height (only GFS and ICON)
     case freezingLevelHeightIconSeamless = "freezing_level_height_icon_seamless"
     case freezingLevelHeightGfsSeamless = "freezing_level_height_gfs_seamless"
+
+    // Cloud cover
+    case cloudCoverEcmwfIfs025 = "cloud_cover_ecmwf_ifs025"
+    case cloudCoverEcmwfAifs025 = "cloud_cover_ecmwf_aifs025"
+    case cloudCoverIconSeamless = "cloud_cover_icon_seamless"
+    case cloudCoverGfsSeamless = "cloud_cover_gfs_seamless"
+    case cloudCoverHrrrConus = "cloud_cover_ncep_hrrr_conus"
+    case cloudCoverNbmConus = "cloud_cover_ncep_nbm_conus"
+    case cloudCoverGemGlobal = "cloud_cover_gem_global"
+    case cloudCoverGemRegional = "cloud_cover_gem_regional"
+    case cloudCoverGemHrdpsContinental = "cloud_cover_gem_hrdps_continental"
   }
 }
 
@@ -1120,6 +1186,10 @@ public struct WeatherModelData {
   // Freezing level height (altitude of 0°C level, only available for GFS and ICON models)
   public let freezingLevelHeight: Double?
   public let freezingLevelHeightUnit: String?
+
+  // Cloud cover data (0-100%)
+  public let cloudCover: Int?
+  public let cloudCoverUnit: String?
 }
 
 // MARK: - Freezing Level Response
