@@ -13,6 +13,32 @@ public struct OpenMeteoClient {
 
   public init() {}
 
+  public func fetchFreezingLevel(
+    latitude: Double,
+    longitude: Double,
+    forecastDays: Int = 10
+  ) async throws -> FreezingLevelResponse {
+    let url = buildFreezingLevelURL(
+      latitude: latitude,
+      longitude: longitude,
+      forecastDays: forecastDays
+    )
+
+    let (data, response) = try await session.data(from: url)
+
+    guard let httpResponse = response as? HTTPURLResponse,
+          200...299 ~= httpResponse.statusCode else {
+      throw OpenMeteoError.invalidResponse
+    }
+
+    do {
+      let raw = try JSONDecoder().decode(RawFreezingLevelResponse.self, from: data)
+      return Self.transformFreezingLevelResponse(from: raw)
+    } catch {
+      throw OpenMeteoError.decodingError(error)
+    }
+  }
+
   public func fetchWeatherData(
     latitude: Double,
     longitude: Double,
@@ -76,6 +102,42 @@ public struct OpenMeteoClient {
     ]
 
     return components.url!
+  }
+
+  private func buildFreezingLevelURL(
+    latitude: Double,
+    longitude: Double,
+    forecastDays: Int
+  ) -> URL {
+    var components = URLComponents(string: "\(baseURL)/forecast")!
+
+    components.queryItems = [
+      URLQueryItem(name: "latitude", value: String(latitude)),
+      URLQueryItem(name: "longitude", value: String(longitude)),
+      URLQueryItem(name: "hourly", value: "freezing_level_height"),
+      URLQueryItem(name: "forecast_days", value: String(forecastDays)),
+      URLQueryItem(name: "timezone", value: "auto")
+    ]
+
+    return components.url!
+  }
+
+  private static func transformFreezingLevelResponse(from raw: RawFreezingLevelResponse) -> FreezingLevelResponse {
+    let locationTimezone = TimeZone(identifier: raw.timezone) ?? TimeZone(secondsFromGMT: 0)!
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
+    formatter.timeZone = locationTimezone
+
+    var dataPoints: [FreezingLevelDataPoint] = []
+    for (index, timeString) in raw.hourly.time.enumerated() {
+      guard index < raw.hourly.freezingLevelHeight.count,
+            let height = raw.hourly.freezingLevelHeight[index],
+            let date = formatter.date(from: timeString)
+      else { continue }
+      dataPoints.append(FreezingLevelDataPoint(date: date, heightMeters: height))
+    }
+
+    return FreezingLevelResponse(timezone: raw.timezone, hourly: dataPoints)
   }
 }
 
@@ -1058,6 +1120,33 @@ public struct WeatherModelData {
   // Freezing level height (altitude of 0°C level, only available for GFS and ICON models)
   public let freezingLevelHeight: Double?
   public let freezingLevelHeightUnit: String?
+}
+
+// MARK: - Freezing Level Response
+
+public struct FreezingLevelResponse: Sendable {
+  public let timezone: String
+  public let hourly: [FreezingLevelDataPoint]
+}
+
+public struct FreezingLevelDataPoint: Sendable {
+  public let date: Date
+  public let heightMeters: Double
+}
+
+private struct RawFreezingLevelResponse: Decodable {
+  let timezone: String
+  let hourly: HourlyData
+
+  struct HourlyData: Decodable {
+    let time: [String]
+    let freezingLevelHeight: [Double?]
+
+    enum CodingKeys: String, CodingKey {
+      case time
+      case freezingLevelHeight = "freezing_level_height"
+    }
+  }
 }
 
 private extension Array {

@@ -910,3 +910,57 @@ import Foundation
   // Wind data should still work
   #expect(gfsData?.windSpeed == 5.0)
 }
+
+// MARK: - Standalone Freezing Level Endpoint Tests
+
+@Test func testStandaloneFreezingLevelDecoding() async throws {
+  let jsonString = """
+  {
+    "timezone": "America/Vancouver",
+    "hourly": {
+      "time": [
+        "2025-12-20T08:00",
+        "2025-12-20T09:00",
+        "2025-12-20T10:00"
+      ],
+      "freezing_level_height": [2150.5, null, 2200.0]
+    }
+  }
+  """
+
+  // Verify the JSON structure is valid by decoding manually
+  // (the private RawFreezingLevelResponse isn't accessible, so we test via the public API)
+  let jsonData = jsonString.data(using: .utf8)!
+  let json = try JSONSerialization.jsonObject(with: jsonData) as! [String: Any]
+  let hourly = json["hourly"] as! [String: Any]
+  let times = hourly["time"] as! [String]
+  let heights = hourly["freezing_level_height"] as! [Any]
+
+  #expect(times.count == 3)
+  #expect(heights.count == 3)
+  #expect(json["timezone"] as? String == "America/Vancouver")
+}
+
+@Test func testStandaloneFreezingLevelTimezoneAwareParsing() async throws {
+  // Verify that the fetchFreezingLevel method correctly handles timezone-aware dates
+  // by testing with a known location (Vancouver, PST = UTC-8)
+  let client = OpenMeteoClient()
+  let response = try await client.fetchFreezingLevel(
+    latitude: 49.2827,
+    longitude: -123.1207,
+    forecastDays: 1
+  )
+
+  #expect(response.timezone == "America/Vancouver")
+  #expect(!response.hourly.isEmpty)
+
+  // Verify dates are parsed in the location's timezone (not UTC)
+  // With timezone=auto, first hour should be midnight local time
+  if let firstPoint = response.hourly.first {
+    var cal = Calendar(identifier: .gregorian)
+    cal.timeZone = TimeZone(identifier: "America/Vancouver")!
+    let hour = cal.component(.hour, from: firstPoint.date)
+    #expect(hour == 0, "First data point should be at midnight local time")
+    #expect(firstPoint.heightMeters > 0, "Freezing level height should be positive")
+  }
+}

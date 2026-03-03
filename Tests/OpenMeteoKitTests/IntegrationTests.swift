@@ -350,6 +350,29 @@ import Foundation
   print("✅ GEM Regional model verified")
 }
 
+@Test func testFetchFreezingLevel() async throws {
+  let client = OpenMeteoClient()
+
+  let response = try await client.fetchFreezingLevel(
+    latitude: 49.2827,
+    longitude: -123.1207
+  )
+
+  #expect(response.timezone == "America/Vancouver")
+  #expect(!response.hourly.isEmpty, "Should have freezing level data points")
+
+  // 10-day forecast at hourly resolution should have ~240 points (minus nulls)
+  #expect(response.hourly.count > 100, "Should have many data points for 10-day forecast")
+
+  // Verify data point values are reasonable
+  for point in response.hourly {
+    #expect(point.heightMeters >= 0 && point.heightMeters < 10000,
+            "Freezing level should be between 0 and 10000m, got \(point.heightMeters)")
+  }
+
+  print("✅ Fetched \(response.hourly.count) freezing level data points for Vancouver")
+}
+
 @Test func testAllModelsAtOnce() async throws {
   let client = OpenMeteoClient()
   // Use US coordinates since some models only cover CONUS
