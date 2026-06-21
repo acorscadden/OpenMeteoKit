@@ -8,21 +8,36 @@
 import Foundation
 
 public struct OpenMeteoClient {
-  private let baseURL = "https://api.open-meteo.com/v1"
+  private let baseURL: String
+  private let apiKey: String?
   private let session = URLSession.shared
 
-  public init() {}
+  public init(baseURL: String = "https://api.open-meteo.com/v1", apiKey: String? = nil) {
+    self.baseURL = baseURL
+    self.apiKey = apiKey
+  }
+
+  /// Appends the apiKey query item (if configured) to the given URL.
+  private func applyingAPIKey(to url: URL) -> URL {
+    guard let apiKey, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+      return url
+    }
+    var items = components.queryItems ?? []
+    items.append(URLQueryItem(name: "apikey", value: apiKey))
+    components.queryItems = items
+    return components.url ?? url
+  }
 
   public func fetchFreezingLevel(
     latitude: Double,
     longitude: Double,
     forecastDays: Int = 10
   ) async throws -> FreezingLevelResponse {
-    let url = buildFreezingLevelURL(
+    let url = applyingAPIKey(to: buildFreezingLevelURL(
       latitude: latitude,
       longitude: longitude,
       forecastDays: forecastDays
-    )
+    ))
 
     let (data, response) = try await session.data(from: url)
 
@@ -44,15 +59,19 @@ public struct OpenMeteoClient {
     longitude: Double,
     models: [WeatherModel] = [.ecmwfIfs025, .iconSeamless],
     windSpeedUnit: WindSpeedUnit = .knots,
-    dataTypes: WeatherDataType = .all
+    dataTypes: WeatherDataType = .all,
+    forecastDays: Int = 10,
+    includeDaily: Bool = true
   ) async throws -> OpenMeteoWeatherResponse {
-    let url = buildURL(
+    let url = applyingAPIKey(to: buildURL(
       latitude: latitude,
       longitude: longitude,
       models: models,
       windSpeedUnit: windSpeedUnit,
-      dataTypes: dataTypes
-    )
+      dataTypes: dataTypes,
+      forecastDays: forecastDays,
+      includeDaily: includeDaily
+    ))
 
     let (data, response) = try await session.data(from: url)
 
@@ -73,7 +92,9 @@ public struct OpenMeteoClient {
     longitude: Double,
     models: [WeatherModel],
     windSpeedUnit: WindSpeedUnit,
-    dataTypes: WeatherDataType
+    dataTypes: WeatherDataType,
+    forecastDays: Int,
+    includeDaily: Bool
   ) -> URL {
     var components = URLComponents(string: "\(baseURL)/forecast")!
 
@@ -87,7 +108,14 @@ public struct OpenMeteoClient {
       hourlyParams.append(contentsOf: ["precipitation", "rain", "showers", "snowfall", "precipitation_probability", "weather_code"])
     }
     if dataTypes.contains(.temperature) {
-      hourlyParams.append("temperature_2m")
+      hourlyParams.append(contentsOf: [
+        "temperature_2m",
+        "apparent_temperature",
+        "dew_point_2m",
+        "relative_humidity_2m",
+        "pressure_msl",
+        "is_day"
+      ])
     }
     if dataTypes.contains(.freezingLevel) {
       hourlyParams.append("freezing_level_height")
@@ -96,13 +124,34 @@ public struct OpenMeteoClient {
       hourlyParams.append("cloud_cover")
     }
 
-    components.queryItems = [
+    var queryItems = [
       URLQueryItem(name: "latitude", value: String(latitude)),
       URLQueryItem(name: "longitude", value: String(longitude)),
       URLQueryItem(name: "hourly", value: hourlyParams.joined(separator: ",")),
       URLQueryItem(name: "models", value: modelString),
-      URLQueryItem(name: "wind_speed_unit", value: windSpeedUnit.rawValue)
+      URLQueryItem(name: "wind_speed_unit", value: windSpeedUnit.rawValue),
+      URLQueryItem(name: "forecast_days", value: String(forecastDays)),
+      URLQueryItem(name: "timezone", value: "auto")
     ]
+
+    if includeDaily {
+      let dailyParams = [
+        "temperature_2m_max",
+        "temperature_2m_min",
+        "sunrise",
+        "sunset",
+        "precipitation_sum",
+        "snowfall_sum",
+        "precipitation_probability_max",
+        "wind_speed_10m_max",
+        "wind_gusts_10m_max",
+        "weather_code",
+        "uv_index_max"
+      ]
+      queryItems.append(URLQueryItem(name: "daily", value: dailyParams.joined(separator: ",")))
+    }
+
+    components.queryItems = queryItems
 
     return components.url!
   }
@@ -212,6 +261,66 @@ public enum WeatherModel: String, CaseIterable {
   public static func availableModels(latitude: Double, longitude: Double) -> [WeatherModel] {
     return WeatherModel.allCases.filter { $0.isAvailable(latitude: latitude, longitude: longitude) }
   }
+
+  // MARK: - Capabilities
+
+  /// Maximum number of forecast days this model provides.
+  public var maxForecastDays: Int {
+    switch self {
+    case .ecmwfIfs025: return 15
+    case .ecmwfAifs025: return 15
+    case .iconSeamless: return 7
+    case .gfsSeamless: return 16
+    case .hrrr: return 2
+    case .nbm: return 11
+    case .gemGlobal: return 10
+    case .gemRegional: return 3
+    case .gemHrdpsContinental: return 2
+    }
+  }
+
+  /// Whether this model can stand alone for a 10-day forecast.
+  /// Short-range / high-resolution models cannot and must be stitched onto a longer-range tail.
+  public var standaloneTenDayCapable: Bool {
+    switch self {
+    case .hrrr, .gemHrdpsContinental, .gemRegional:
+      return false
+    default:
+      return true
+    }
+  }
+
+  /// Whether this is a short-range / high-resolution model.
+  public var isHighResolution: Bool {
+    switch self {
+    case .hrrr, .gemHrdpsContinental, .gemRegional, .nbm:
+      return true
+    default:
+      return false
+    }
+  }
+
+  /// For a short-horizon model, returns the longer-range model to stitch onto, picked from coverage.
+  /// Returns nil for models that already provide a full forecast horizon.
+  /// - Parameters:
+  ///   - latitude: Latitude in degrees (-90 to 90)
+  ///   - longitude: Longitude in degrees (-180 to 180)
+  public func tailModel(latitude: Double, longitude: Double) -> WeatherModel? {
+    switch self {
+    case .gemHrdpsContinental:
+      return WeatherModel.gemRegional.isAvailable(latitude: latitude, longitude: longitude)
+        ? .gemRegional
+        : .gemGlobal
+    case .gemRegional:
+      return .gemGlobal
+    case .hrrr:
+      return WeatherModel.nbm.isAvailable(latitude: latitude, longitude: longitude)
+        ? .nbm
+        : .gfsSeamless
+    default:
+      return nil
+    }
+  }
 }
 
 public enum WindSpeedUnit: String, CaseIterable {
@@ -254,6 +363,7 @@ public struct OpenMeteoWeatherResponse: Decodable {
   public let timezoneAbbreviation: String
   public let elevation: Double
   public let hourly: [HourlyData]
+  public let daily: [DailyData]
 
   enum CodingKeys: String, CodingKey {
     case latitude, longitude, timezone, elevation
@@ -262,6 +372,17 @@ public struct OpenMeteoWeatherResponse: Decodable {
     case timezoneAbbreviation = "timezone_abbreviation"
     case hourlyUnits = "hourly_units"
     case hourlyData = "hourly"
+    case dailyUnits = "daily_units"
+    case dailyData = "daily"
+  }
+
+  /// A `CodingKey` that accepts any string key, used to decode the variable
+  /// per-model field set returned by Open-Meteo (e.g. `temperature_2m_gem_global`).
+  private struct DynamicKey: CodingKey {
+    let stringValue: String
+    let intValue: Int? = nil
+    init?(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { return nil }
   }
 
   public init(from decoder: Decoder) throws {
@@ -275,875 +396,216 @@ public struct OpenMeteoWeatherResponse: Decodable {
     timezoneAbbreviation = try container.decode(String.self, forKey: .timezoneAbbreviation)
     elevation = try container.decode(Double.self, forKey: .elevation)
 
-    let units = try container.decode(HourlyUnits.self, forKey: .hourlyUnits)
-    let data = try container.decode(RawHourlyData.self, forKey: .hourlyData)
+    // --- Hourly block (dynamic) ---
+    let hourlyValues = try Self.decodeDynamicHourly(container, forKey: .hourlyData)
+    let hourlyUnits = try Self.decodeDynamicUnits(container, forKey: .hourlyUnits)
+    hourly = Self.buildHourly(values: hourlyValues, units: hourlyUnits)
 
-    // Transform raw data into structured hourly data
-    hourly = Self.transformHourlyData(from: data, units: units)
+    // --- Daily block (dynamic, optional) ---
+    if container.contains(.dailyData) {
+      let dailyValues = try Self.decodeDynamicDaily(container, forKey: .dailyData)
+      let dailyUnits = try Self.decodeDynamicUnits(container, forKey: .dailyUnits)
+      daily = Self.buildDaily(values: dailyValues, units: dailyUnits)
+    } else {
+      daily = []
+    }
   }
 
-  private static func transformHourlyData(from data: RawHourlyData, units: HourlyUnits) -> [HourlyData] {
+  /// Decodes a block keyed by full field names. `time` is `[String]`; all other
+  /// keys decode to `[Double?]`.
+  private static func decodeDynamicHourly(
+    _ container: KeyedDecodingContainer<CodingKeys>,
+    forKey key: CodingKeys
+  ) throws -> (time: [String], fields: [String: [Double?]]) {
+    let block = try container.nestedContainer(keyedBy: DynamicKey.self, forKey: key)
+    var time: [String] = []
+    var fields: [String: [Double?]] = [:]
+    for k in block.allKeys {
+      if k.stringValue == "time" {
+        time = try block.decode([String].self, forKey: k)
+      } else {
+        fields[k.stringValue] = try block.decode([Double?].self, forKey: k)
+      }
+    }
+    return (time, fields)
+  }
+
+  /// Decodes the daily block. `time` and the date-like string fields (`sunrise_*`,
+  /// `sunset_*`) decode to `[String?]`; everything else to `[Double?]`.
+  private static func decodeDynamicDaily(
+    _ container: KeyedDecodingContainer<CodingKeys>,
+    forKey key: CodingKeys
+  ) throws -> (time: [String], strings: [String: [String?]], fields: [String: [Double?]]) {
+    let block = try container.nestedContainer(keyedBy: DynamicKey.self, forKey: key)
+    var time: [String] = []
+    var strings: [String: [String?]] = [:]
+    var fields: [String: [Double?]] = [:]
+    for k in block.allKeys {
+      let name = k.stringValue
+      if name == "time" {
+        time = try block.decode([String].self, forKey: k)
+      } else if name.hasPrefix("sunrise") || name.hasPrefix("sunset") {
+        strings[name] = try block.decode([String?].self, forKey: k)
+      } else {
+        fields[name] = try block.decode([Double?].self, forKey: k)
+      }
+    }
+    return (time, strings, fields)
+  }
+
+  /// Decodes a `*_units` block into `[fieldName: unitString]`.
+  private static func decodeDynamicUnits(
+    _ container: KeyedDecodingContainer<CodingKeys>,
+    forKey key: CodingKeys
+  ) throws -> [String: String] {
+    let block = try container.nestedContainer(keyedBy: DynamicKey.self, forKey: key)
+    var units: [String: String] = [:]
+    for k in block.allKeys {
+      units[k.stringValue] = try? block.decode(String.self, forKey: k)
+    }
+    return units
+  }
+
+  // MARK: Builders
+
+  private static func buildHourly(
+    values: (time: [String], fields: [String: [Double?]]),
+    units: [String: String]
+  ) -> [HourlyData] {
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
     formatter.timeZone = TimeZone(abbreviation: "GMT")
 
-    return data.time.enumerated().map { (index: Int, timeString: String) -> HourlyData in
-      let date = formatter.date(from: timeString) ?? Date()
+    // Determine which models are present from the decoded field keys.
+    let models = presentModels(in: Set(values.fields.keys))
 
+    /// Looks up `<field>_<model>` at index `i`.
+    func d(_ field: String, _ model: WeatherModel, at i: Int) -> Double? {
+      guard let arr = values.fields["\(field)_\(model.rawValue)"], arr.indices.contains(i) else {
+        return nil
+      }
+      return arr[i]
+    }
+
+    func u(_ field: String, _ model: WeatherModel) -> String? {
+      units["\(field)_\(model.rawValue)"]
+    }
+
+    return values.time.enumerated().map { (index, timeString) in
+      let date = formatter.date(from: timeString) ?? Date()
       var modelData: [WeatherModel: WeatherModelData] = [:]
 
-      // ECMWF IFS025 data
-      modelData[.ecmwfIfs025] = WeatherModelData(
-        windSpeed: data.windSpeed10mEcmwfIfs025?[safe: index] ?? nil,
-        windDirection: data.windDirection10mEcmwfIfs025?[safe: index] ?? nil,
-        windGusts: data.windGusts10mEcmwfIfs025?[safe: index] ?? nil,
-        windSpeedUnit: units.windSpeed10mEcmwfIfs025 ?? "kn",
-        windDirectionUnit: units.windDirection10mEcmwfIfs025 ?? "°",
-        windGustsUnit: units.windGusts10mEcmwfIfs025 ?? "kn",
-        precipitation: data.precipitationEcmwfIfs025?[safe: index] ?? nil,
-        rain: data.rainEcmwfIfs025?[safe: index] ?? nil,
-        showers: data.showersEcmwfIfs025?[safe: index] ?? nil,
-        snowfall: data.snowfallEcmwfIfs025?[safe: index] ?? nil,
-        precipitationProbability: data.precipitationProbabilityEcmwfIfs025?[safe: index] ?? nil,
-        precipitationUnit: units.precipitationEcmwfIfs025 ?? "mm",
-        rainUnit: units.rainEcmwfIfs025 ?? "mm",
-        showersUnit: units.showersEcmwfIfs025 ?? "mm",
-        snowfallUnit: units.snowfallEcmwfIfs025 ?? "cm",
-        precipitationProbabilityUnit: units.precipitationProbabilityEcmwfIfs025 ?? "%",
-        weatherCode: data.weatherCodeEcmwfIfs025?[safe: index] ?? nil,
-        weatherCodeUnit: units.weatherCodeEcmwfIfs025 ?? "wmo code",
-        temperature: data.temperature2mEcmwfIfs025?[safe: index] ?? nil,
-        temperatureUnit: units.temperature2mEcmwfIfs025 ?? "°C",
-        freezingLevelHeight: nil,
-        freezingLevelHeightUnit: nil,
-        cloudCover: data.cloudCoverEcmwfIfs025?[safe: index] ?? nil,
-        cloudCoverUnit: units.cloudCoverEcmwfIfs025 ?? "%"
-      )
-
-      // Icon Seamless data
-      modelData[.iconSeamless] = WeatherModelData(
-        windSpeed: data.windSpeed10mIconSeamless?[safe: index] ?? nil,
-        windDirection: data.windDirection10mIconSeamless?[safe: index] ?? nil,
-        windGusts: data.windGusts10mIconSeamless?[safe: index] ?? nil,
-        windSpeedUnit: units.windSpeed10mIconSeamless ?? "kn",
-        windDirectionUnit: units.windDirection10mIconSeamless ?? "°",
-        windGustsUnit: units.windGusts10mIconSeamless ?? "kn",
-        precipitation: data.precipitationIconSeamless?[safe: index] ?? nil,
-        rain: data.rainIconSeamless?[safe: index] ?? nil,
-        showers: data.showersIconSeamless?[safe: index] ?? nil,
-        snowfall: data.snowfallIconSeamless?[safe: index] ?? nil,
-        precipitationProbability: data.precipitationProbabilityIconSeamless?[safe: index] ?? nil,
-        precipitationUnit: units.precipitationIconSeamless ?? "mm",
-        rainUnit: units.rainIconSeamless ?? "mm",
-        showersUnit: units.showersIconSeamless ?? "mm",
-        snowfallUnit: units.snowfallIconSeamless ?? "cm",
-        precipitationProbabilityUnit: units.precipitationProbabilityIconSeamless ?? "%",
-        weatherCode: data.weatherCodeIconSeamless?[safe: index] ?? nil,
-        weatherCodeUnit: units.weatherCodeIconSeamless ?? "wmo code",
-        temperature: data.temperature2mIconSeamless?[safe: index] ?? nil,
-        temperatureUnit: units.temperature2mIconSeamless ?? "°C",
-        freezingLevelHeight: data.freezingLevelHeightIconSeamless?[safe: index] ?? nil,
-        freezingLevelHeightUnit: units.freezingLevelHeightIconSeamless ?? "m",
-        cloudCover: data.cloudCoverIconSeamless?[safe: index] ?? nil,
-        cloudCoverUnit: units.cloudCoverIconSeamless ?? "%"
-      )
-
-      // GEM HRDPS Continental data
-      modelData[.gemHrdpsContinental] = WeatherModelData(
-        windSpeed: data.windSpeed10mGemHrdpsContinental?[safe: index] ?? nil,
-        windDirection: data.windDirection10mGemHrdpsContinental?[safe: index] ?? nil,
-        windGusts: data.windGusts10mGemHrdpsContinental?[safe: index] ?? nil,
-        windSpeedUnit: units.windSpeed10mGemHrdpsContinental ?? "kn",
-        windDirectionUnit: units.windDirection10mGemHrdpsContinental ?? "°",
-        windGustsUnit: units.windGusts10mGemHrdpsContinental ?? "kn",
-        precipitation: data.precipitationGemHrdpsContinental?[safe: index] ?? nil,
-        rain: data.rainGemHrdpsContinental?[safe: index] ?? nil,
-        showers: data.showersGemHrdpsContinental?[safe: index] ?? nil,
-        snowfall: data.snowfallGemHrdpsContinental?[safe: index] ?? nil,
-        precipitationProbability: data.precipitationProbabilityGemHrdpsContinental?[safe: index] ?? nil,
-        precipitationUnit: units.precipitationGemHrdpsContinental ?? "mm",
-        rainUnit: units.rainGemHrdpsContinental ?? "mm",
-        showersUnit: units.showersGemHrdpsContinental ?? "mm",
-        snowfallUnit: units.snowfallGemHrdpsContinental ?? "cm",
-        precipitationProbabilityUnit: units.precipitationProbabilityGemHrdpsContinental ?? "%",
-        weatherCode: data.weatherCodeGemHrdpsContinental?[safe: index] ?? nil,
-        weatherCodeUnit: units.weatherCodeGemHrdpsContinental ?? "wmo code",
-        temperature: data.temperature2mGemHrdpsContinental?[safe: index] ?? nil,
-        temperatureUnit: units.temperature2mGemHrdpsContinental ?? "°C",
-        freezingLevelHeight: nil,
-        freezingLevelHeightUnit: nil,
-        cloudCover: data.cloudCoverGemHrdpsContinental?[safe: index] ?? nil,
-        cloudCoverUnit: units.cloudCoverGemHrdpsContinental ?? "%"
-      )
-
-      // ECMWF AIFS data
-      modelData[.ecmwfAifs025] = WeatherModelData(
-        windSpeed: data.windSpeed10mEcmwfAifs025?[safe: index] ?? nil,
-        windDirection: data.windDirection10mEcmwfAifs025?[safe: index] ?? nil,
-        windGusts: data.windGusts10mEcmwfAifs025?[safe: index] ?? nil,
-        windSpeedUnit: units.windSpeed10mEcmwfAifs025 ?? "kn",
-        windDirectionUnit: units.windDirection10mEcmwfAifs025 ?? "°",
-        windGustsUnit: units.windGusts10mEcmwfAifs025 ?? "kn",
-        precipitation: data.precipitationEcmwfAifs025?[safe: index] ?? nil,
-        rain: data.rainEcmwfAifs025?[safe: index] ?? nil,
-        showers: data.showersEcmwfAifs025?[safe: index] ?? nil,
-        snowfall: data.snowfallEcmwfAifs025?[safe: index] ?? nil,
-        precipitationProbability: data.precipitationProbabilityEcmwfAifs025?[safe: index] ?? nil,
-        precipitationUnit: units.precipitationEcmwfAifs025 ?? "mm",
-        rainUnit: units.rainEcmwfAifs025 ?? "mm",
-        showersUnit: units.showersEcmwfAifs025 ?? "mm",
-        snowfallUnit: units.snowfallEcmwfAifs025 ?? "cm",
-        precipitationProbabilityUnit: units.precipitationProbabilityEcmwfAifs025 ?? "%",
-        weatherCode: data.weatherCodeEcmwfAifs025?[safe: index] ?? nil,
-        weatherCodeUnit: units.weatherCodeEcmwfAifs025 ?? "wmo code",
-        temperature: data.temperature2mEcmwfAifs025?[safe: index] ?? nil,
-        temperatureUnit: units.temperature2mEcmwfAifs025 ?? "°C",
-        freezingLevelHeight: nil,
-        freezingLevelHeightUnit: nil,
-        cloudCover: data.cloudCoverEcmwfAifs025?[safe: index] ?? nil,
-        cloudCoverUnit: units.cloudCoverEcmwfAifs025 ?? "%"
-      )
-
-      // GFS Seamless data
-      modelData[.gfsSeamless] = WeatherModelData(
-        windSpeed: data.windSpeed10mGfsSeamless?[safe: index] ?? nil,
-        windDirection: data.windDirection10mGfsSeamless?[safe: index] ?? nil,
-        windGusts: data.windGusts10mGfsSeamless?[safe: index] ?? nil,
-        windSpeedUnit: units.windSpeed10mGfsSeamless ?? "kn",
-        windDirectionUnit: units.windDirection10mGfsSeamless ?? "°",
-        windGustsUnit: units.windGusts10mGfsSeamless ?? "kn",
-        precipitation: data.precipitationGfsSeamless?[safe: index] ?? nil,
-        rain: data.rainGfsSeamless?[safe: index] ?? nil,
-        showers: data.showersGfsSeamless?[safe: index] ?? nil,
-        snowfall: data.snowfallGfsSeamless?[safe: index] ?? nil,
-        precipitationProbability: data.precipitationProbabilityGfsSeamless?[safe: index] ?? nil,
-        precipitationUnit: units.precipitationGfsSeamless ?? "mm",
-        rainUnit: units.rainGfsSeamless ?? "mm",
-        showersUnit: units.showersGfsSeamless ?? "mm",
-        snowfallUnit: units.snowfallGfsSeamless ?? "cm",
-        precipitationProbabilityUnit: units.precipitationProbabilityGfsSeamless ?? "%",
-        weatherCode: data.weatherCodeGfsSeamless?[safe: index] ?? nil,
-        weatherCodeUnit: units.weatherCodeGfsSeamless ?? "wmo code",
-        temperature: data.temperature2mGfsSeamless?[safe: index] ?? nil,
-        temperatureUnit: units.temperature2mGfsSeamless ?? "°C",
-        freezingLevelHeight: data.freezingLevelHeightGfsSeamless?[safe: index] ?? nil,
-        freezingLevelHeightUnit: units.freezingLevelHeightGfsSeamless ?? "m",
-        cloudCover: data.cloudCoverGfsSeamless?[safe: index] ?? nil,
-        cloudCoverUnit: units.cloudCoverGfsSeamless ?? "%"
-      )
-
-      // HRRR data
-      modelData[.hrrr] = WeatherModelData(
-        windSpeed: data.windSpeed10mHrrrConus?[safe: index] ?? nil,
-        windDirection: data.windDirection10mHrrrConus?[safe: index] ?? nil,
-        windGusts: data.windGusts10mHrrrConus?[safe: index] ?? nil,
-        windSpeedUnit: units.windSpeed10mHrrrConus ?? "kn",
-        windDirectionUnit: units.windDirection10mHrrrConus ?? "°",
-        windGustsUnit: units.windGusts10mHrrrConus ?? "kn",
-        precipitation: data.precipitationHrrrConus?[safe: index] ?? nil,
-        rain: data.rainHrrrConus?[safe: index] ?? nil,
-        showers: data.showersHrrrConus?[safe: index] ?? nil,
-        snowfall: data.snowfallHrrrConus?[safe: index] ?? nil,
-        precipitationProbability: data.precipitationProbabilityHrrrConus?[safe: index] ?? nil,
-        precipitationUnit: units.precipitationHrrrConus ?? "mm",
-        rainUnit: units.rainHrrrConus ?? "mm",
-        showersUnit: units.showersHrrrConus ?? "mm",
-        snowfallUnit: units.snowfallHrrrConus ?? "cm",
-        precipitationProbabilityUnit: units.precipitationProbabilityHrrrConus ?? "%",
-        weatherCode: data.weatherCodeHrrrConus?[safe: index] ?? nil,
-        weatherCodeUnit: units.weatherCodeHrrrConus ?? "wmo code",
-        temperature: data.temperature2mHrrrConus?[safe: index] ?? nil,
-        temperatureUnit: units.temperature2mHrrrConus ?? "°C",
-        freezingLevelHeight: nil,
-        freezingLevelHeightUnit: nil,
-        cloudCover: data.cloudCoverHrrrConus?[safe: index] ?? nil,
-        cloudCoverUnit: units.cloudCoverHrrrConus ?? "%"
-      )
-
-      // NBM data
-      modelData[.nbm] = WeatherModelData(
-        windSpeed: data.windSpeed10mNbmConus?[safe: index] ?? nil,
-        windDirection: data.windDirection10mNbmConus?[safe: index] ?? nil,
-        windGusts: data.windGusts10mNbmConus?[safe: index] ?? nil,
-        windSpeedUnit: units.windSpeed10mNbmConus ?? "kn",
-        windDirectionUnit: units.windDirection10mNbmConus ?? "°",
-        windGustsUnit: units.windGusts10mNbmConus ?? "kn",
-        precipitation: data.precipitationNbmConus?[safe: index] ?? nil,
-        rain: data.rainNbmConus?[safe: index] ?? nil,
-        showers: data.showersNbmConus?[safe: index] ?? nil,
-        snowfall: data.snowfallNbmConus?[safe: index] ?? nil,
-        precipitationProbability: data.precipitationProbabilityNbmConus?[safe: index] ?? nil,
-        precipitationUnit: units.precipitationNbmConus ?? "mm",
-        rainUnit: units.rainNbmConus ?? "mm",
-        showersUnit: units.showersNbmConus ?? "mm",
-        snowfallUnit: units.snowfallNbmConus ?? "cm",
-        precipitationProbabilityUnit: units.precipitationProbabilityNbmConus ?? "%",
-        weatherCode: data.weatherCodeNbmConus?[safe: index] ?? nil,
-        weatherCodeUnit: units.weatherCodeNbmConus ?? "wmo code",
-        temperature: data.temperature2mNbmConus?[safe: index] ?? nil,
-        temperatureUnit: units.temperature2mNbmConus ?? "°C",
-        freezingLevelHeight: nil,
-        freezingLevelHeightUnit: nil,
-        cloudCover: data.cloudCoverNbmConus?[safe: index] ?? nil,
-        cloudCoverUnit: units.cloudCoverNbmConus ?? "%"
-      )
-
-      // GEM Global data
-      modelData[.gemGlobal] = WeatherModelData(
-        windSpeed: data.windSpeed10mGemGlobal?[safe: index] ?? nil,
-        windDirection: data.windDirection10mGemGlobal?[safe: index] ?? nil,
-        windGusts: data.windGusts10mGemGlobal?[safe: index] ?? nil,
-        windSpeedUnit: units.windSpeed10mGemGlobal ?? "kn",
-        windDirectionUnit: units.windDirection10mGemGlobal ?? "°",
-        windGustsUnit: units.windGusts10mGemGlobal ?? "kn",
-        precipitation: data.precipitationGemGlobal?[safe: index] ?? nil,
-        rain: data.rainGemGlobal?[safe: index] ?? nil,
-        showers: data.showersGemGlobal?[safe: index] ?? nil,
-        snowfall: data.snowfallGemGlobal?[safe: index] ?? nil,
-        precipitationProbability: data.precipitationProbabilityGemGlobal?[safe: index] ?? nil,
-        precipitationUnit: units.precipitationGemGlobal ?? "mm",
-        rainUnit: units.rainGemGlobal ?? "mm",
-        showersUnit: units.showersGemGlobal ?? "mm",
-        snowfallUnit: units.snowfallGemGlobal ?? "cm",
-        precipitationProbabilityUnit: units.precipitationProbabilityGemGlobal ?? "%",
-        weatherCode: data.weatherCodeGemGlobal?[safe: index] ?? nil,
-        weatherCodeUnit: units.weatherCodeGemGlobal ?? "wmo code",
-        temperature: data.temperature2mGemGlobal?[safe: index] ?? nil,
-        temperatureUnit: units.temperature2mGemGlobal ?? "°C",
-        freezingLevelHeight: nil,
-        freezingLevelHeightUnit: nil,
-        cloudCover: data.cloudCoverGemGlobal?[safe: index] ?? nil,
-        cloudCoverUnit: units.cloudCoverGemGlobal ?? "%"
-      )
-
-      // GEM Regional data
-      modelData[.gemRegional] = WeatherModelData(
-        windSpeed: data.windSpeed10mGemRegional?[safe: index] ?? nil,
-        windDirection: data.windDirection10mGemRegional?[safe: index] ?? nil,
-        windGusts: data.windGusts10mGemRegional?[safe: index] ?? nil,
-        windSpeedUnit: units.windSpeed10mGemRegional ?? "kn",
-        windDirectionUnit: units.windDirection10mGemRegional ?? "°",
-        windGustsUnit: units.windGusts10mGemRegional ?? "kn",
-        precipitation: data.precipitationGemRegional?[safe: index] ?? nil,
-        rain: data.rainGemRegional?[safe: index] ?? nil,
-        showers: data.showersGemRegional?[safe: index] ?? nil,
-        snowfall: data.snowfallGemRegional?[safe: index] ?? nil,
-        precipitationProbability: data.precipitationProbabilityGemRegional?[safe: index] ?? nil,
-        precipitationUnit: units.precipitationGemRegional ?? "mm",
-        rainUnit: units.rainGemRegional ?? "mm",
-        showersUnit: units.showersGemRegional ?? "mm",
-        snowfallUnit: units.snowfallGemRegional ?? "cm",
-        precipitationProbabilityUnit: units.precipitationProbabilityGemRegional ?? "%",
-        weatherCode: data.weatherCodeGemRegional?[safe: index] ?? nil,
-        weatherCodeUnit: units.weatherCodeGemRegional ?? "wmo code",
-        temperature: data.temperature2mGemRegional?[safe: index] ?? nil,
-        temperatureUnit: units.temperature2mGemRegional ?? "°C",
-        freezingLevelHeight: nil,
-        freezingLevelHeightUnit: nil,
-        cloudCover: data.cloudCoverGemRegional?[safe: index] ?? nil,
-        cloudCoverUnit: units.cloudCoverGemRegional ?? "%"
-      )
+      for model in models {
+        modelData[model] = WeatherModelData(
+          windSpeed: d("wind_speed_10m", model, at: index),
+          windDirection: d("wind_direction_10m", model, at: index).map { Int($0) },
+          windGusts: d("wind_gusts_10m", model, at: index),
+          windSpeedUnit: u("wind_speed_10m", model),
+          windDirectionUnit: u("wind_direction_10m", model),
+          windGustsUnit: u("wind_gusts_10m", model),
+          precipitation: d("precipitation", model, at: index),
+          rain: d("rain", model, at: index),
+          showers: d("showers", model, at: index),
+          snowfall: d("snowfall", model, at: index),
+          precipitationProbability: d("precipitation_probability", model, at: index).map { Int($0) },
+          precipitationUnit: u("precipitation", model),
+          rainUnit: u("rain", model),
+          showersUnit: u("showers", model),
+          snowfallUnit: u("snowfall", model),
+          precipitationProbabilityUnit: u("precipitation_probability", model),
+          weatherCode: d("weather_code", model, at: index).map { Int($0) },
+          weatherCodeUnit: u("weather_code", model),
+          temperature: d("temperature_2m", model, at: index),
+          temperatureUnit: u("temperature_2m", model),
+          apparentTemperature: d("apparent_temperature", model, at: index),
+          apparentTemperatureUnit: u("apparent_temperature", model),
+          dewPoint: d("dew_point_2m", model, at: index),
+          dewPointUnit: u("dew_point_2m", model),
+          relativeHumidity: d("relative_humidity_2m", model, at: index),
+          relativeHumidityUnit: u("relative_humidity_2m", model),
+          pressureMsl: d("pressure_msl", model, at: index),
+          pressureMslUnit: u("pressure_msl", model),
+          isDay: d("is_day", model, at: index).map { $0 != 0 },
+          freezingLevelHeight: d("freezing_level_height", model, at: index),
+          freezingLevelHeightUnit: u("freezing_level_height", model),
+          cloudCover: d("cloud_cover", model, at: index).map { Int($0) },
+          cloudCoverUnit: u("cloud_cover", model)
+        )
+      }
 
       return HourlyData(time: date, models: modelData)
     }
   }
-}
 
-private struct HourlyUnits: Decodable {
-  let time: String
+  private static func buildDaily(
+    values: (time: [String], strings: [String: [String?]], fields: [String: [Double?]]),
+    units: [String: String]
+  ) -> [DailyData] {
+    let dateFormatter = DateFormatter()
+    dateFormatter.dateFormat = "yyyy-MM-dd"
+    dateFormatter.timeZone = TimeZone(abbreviation: "GMT")
 
-  // Wind units - ECMWF IFS
-  let windSpeed10mEcmwfIfs025: String?
-  let windDirection10mEcmwfIfs025: String?
-  let windGusts10mEcmwfIfs025: String?
+    let dateTimeFormatter = DateFormatter()
+    dateTimeFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
+    dateTimeFormatter.timeZone = TimeZone(abbreviation: "GMT")
 
-  // Wind units - ECMWF AIFS
-  let windSpeed10mEcmwfAifs025: String?
-  let windDirection10mEcmwfAifs025: String?
-  let windGusts10mEcmwfAifs025: String?
+    let models = presentModels(in: Set(values.fields.keys).union(values.strings.keys))
 
-  // Wind units - Icon Seamless
-  let windSpeed10mIconSeamless: String?
-  let windDirection10mIconSeamless: String?
-  let windGusts10mIconSeamless: String?
+    func d(_ field: String, _ model: WeatherModel, at i: Int) -> Double? {
+      guard let arr = values.fields["\(field)_\(model.rawValue)"], arr.indices.contains(i) else {
+        return nil
+      }
+      return arr[i]
+    }
 
-  // Wind units - GFS Seamless
-  let windSpeed10mGfsSeamless: String?
-  let windDirection10mGfsSeamless: String?
-  let windGusts10mGfsSeamless: String?
+    func s(_ field: String, _ model: WeatherModel, at i: Int) -> Date? {
+      guard let arr = values.strings["\(field)_\(model.rawValue)"],
+            arr.indices.contains(i),
+            let str = arr[i] else {
+        return nil
+      }
+      return dateTimeFormatter.date(from: str)
+    }
 
-  // Wind units - HRRR
-  let windSpeed10mHrrrConus: String?
-  let windDirection10mHrrrConus: String?
-  let windGusts10mHrrrConus: String?
+    return values.time.enumerated().map { (index, timeString) in
+      let date = dateFormatter.date(from: timeString) ?? Date()
+      var modelData: [WeatherModel: DailyModelData] = [:]
 
-  // Wind units - NBM
-  let windSpeed10mNbmConus: String?
-  let windDirection10mNbmConus: String?
-  let windGusts10mNbmConus: String?
+      for model in models {
+        modelData[model] = DailyModelData(
+          temperatureMax: d("temperature_2m_max", model, at: index),
+          temperatureMin: d("temperature_2m_min", model, at: index),
+          sunrise: s("sunrise", model, at: index),
+          sunset: s("sunset", model, at: index),
+          precipitationSum: d("precipitation_sum", model, at: index),
+          snowfallSum: d("snowfall_sum", model, at: index),
+          precipitationProbabilityMax: d("precipitation_probability_max", model, at: index).map { Int($0) },
+          windSpeedMax: d("wind_speed_10m_max", model, at: index),
+          windGustsMax: d("wind_gusts_10m_max", model, at: index),
+          weatherCode: d("weather_code", model, at: index).map { Int($0) },
+          uvIndexMax: d("uv_index_max", model, at: index)
+        )
+      }
 
-  // Wind units - GEM Global
-  let windSpeed10mGemGlobal: String?
-  let windDirection10mGemGlobal: String?
-  let windGusts10mGemGlobal: String?
+      return DailyData(date: date, models: modelData)
+    }
+  }
 
-  // Wind units - GEM Regional
-  let windSpeed10mGemRegional: String?
-  let windDirection10mGemRegional: String?
-  let windGusts10mGemRegional: String?
-
-  // Wind units - GEM HRDPS Continental
-  let windSpeed10mGemHrdpsContinental: String?
-  let windDirection10mGemHrdpsContinental: String?
-  let windGusts10mGemHrdpsContinental: String?
-
-  // Precipitation units - ECMWF IFS
-  let precipitationEcmwfIfs025: String?
-  let rainEcmwfIfs025: String?
-  let showersEcmwfIfs025: String?
-  let snowfallEcmwfIfs025: String?
-  let precipitationProbabilityEcmwfIfs025: String?
-
-  // Precipitation units - ECMWF AIFS
-  let precipitationEcmwfAifs025: String?
-  let rainEcmwfAifs025: String?
-  let showersEcmwfAifs025: String?
-  let snowfallEcmwfAifs025: String?
-  let precipitationProbabilityEcmwfAifs025: String?
-
-  // Precipitation units - Icon Seamless
-  let precipitationIconSeamless: String?
-  let rainIconSeamless: String?
-  let showersIconSeamless: String?
-  let snowfallIconSeamless: String?
-  let precipitationProbabilityIconSeamless: String?
-
-  // Precipitation units - GFS Seamless
-  let precipitationGfsSeamless: String?
-  let rainGfsSeamless: String?
-  let showersGfsSeamless: String?
-  let snowfallGfsSeamless: String?
-  let precipitationProbabilityGfsSeamless: String?
-
-  // Precipitation units - HRRR
-  let precipitationHrrrConus: String?
-  let rainHrrrConus: String?
-  let showersHrrrConus: String?
-  let snowfallHrrrConus: String?
-  let precipitationProbabilityHrrrConus: String?
-
-  // Precipitation units - NBM
-  let precipitationNbmConus: String?
-  let rainNbmConus: String?
-  let showersNbmConus: String?
-  let snowfallNbmConus: String?
-  let precipitationProbabilityNbmConus: String?
-
-  // Precipitation units - GEM Global
-  let precipitationGemGlobal: String?
-  let rainGemGlobal: String?
-  let showersGemGlobal: String?
-  let snowfallGemGlobal: String?
-  let precipitationProbabilityGemGlobal: String?
-
-  // Precipitation units - GEM Regional
-  let precipitationGemRegional: String?
-  let rainGemRegional: String?
-  let showersGemRegional: String?
-  let snowfallGemRegional: String?
-  let precipitationProbabilityGemRegional: String?
-
-  // Precipitation units - GEM HRDPS Continental
-  let precipitationGemHrdpsContinental: String?
-  let rainGemHrdpsContinental: String?
-  let showersGemHrdpsContinental: String?
-  let snowfallGemHrdpsContinental: String?
-  let precipitationProbabilityGemHrdpsContinental: String?
-
-  // Weather code units
-  let weatherCodeEcmwfIfs025: String?
-  let weatherCodeEcmwfAifs025: String?
-  let weatherCodeIconSeamless: String?
-  let weatherCodeGfsSeamless: String?
-  let weatherCodeHrrrConus: String?
-  let weatherCodeNbmConus: String?
-  let weatherCodeGemGlobal: String?
-  let weatherCodeGemRegional: String?
-  let weatherCodeGemHrdpsContinental: String?
-
-  // Temperature units
-  let temperature2mEcmwfIfs025: String?
-  let temperature2mEcmwfAifs025: String?
-  let temperature2mIconSeamless: String?
-  let temperature2mGfsSeamless: String?
-  let temperature2mHrrrConus: String?
-  let temperature2mNbmConus: String?
-  let temperature2mGemGlobal: String?
-  let temperature2mGemRegional: String?
-  let temperature2mGemHrdpsContinental: String?
-
-  // Freezing level height units (only supported by GFS and ICON)
-  let freezingLevelHeightIconSeamless: String?
-  let freezingLevelHeightGfsSeamless: String?
-
-  // Cloud cover units
-  let cloudCoverEcmwfIfs025: String?
-  let cloudCoverEcmwfAifs025: String?
-  let cloudCoverIconSeamless: String?
-  let cloudCoverGfsSeamless: String?
-  let cloudCoverHrrrConus: String?
-  let cloudCoverNbmConus: String?
-  let cloudCoverGemGlobal: String?
-  let cloudCoverGemRegional: String?
-  let cloudCoverGemHrdpsContinental: String?
-
-  enum CodingKeys: String, CodingKey {
-    case time
-
-    // Wind - ECMWF IFS
-    case windSpeed10mEcmwfIfs025 = "wind_speed_10m_ecmwf_ifs025"
-    case windDirection10mEcmwfIfs025 = "wind_direction_10m_ecmwf_ifs025"
-    case windGusts10mEcmwfIfs025 = "wind_gusts_10m_ecmwf_ifs025"
-
-    // Wind - ECMWF AIFS
-    case windSpeed10mEcmwfAifs025 = "wind_speed_10m_ecmwf_aifs025"
-    case windDirection10mEcmwfAifs025 = "wind_direction_10m_ecmwf_aifs025"
-    case windGusts10mEcmwfAifs025 = "wind_gusts_10m_ecmwf_aifs025"
-
-    // Wind - Icon Seamless
-    case windSpeed10mIconSeamless = "wind_speed_10m_icon_seamless"
-    case windDirection10mIconSeamless = "wind_direction_10m_icon_seamless"
-    case windGusts10mIconSeamless = "wind_gusts_10m_icon_seamless"
-
-    // Wind - GFS Seamless
-    case windSpeed10mGfsSeamless = "wind_speed_10m_gfs_seamless"
-    case windDirection10mGfsSeamless = "wind_direction_10m_gfs_seamless"
-    case windGusts10mGfsSeamless = "wind_gusts_10m_gfs_seamless"
-
-    // Wind - HRRR
-    case windSpeed10mHrrrConus = "wind_speed_10m_ncep_hrrr_conus"
-    case windDirection10mHrrrConus = "wind_direction_10m_ncep_hrrr_conus"
-    case windGusts10mHrrrConus = "wind_gusts_10m_ncep_hrrr_conus"
-
-    // Wind - NBM
-    case windSpeed10mNbmConus = "wind_speed_10m_ncep_nbm_conus"
-    case windDirection10mNbmConus = "wind_direction_10m_ncep_nbm_conus"
-    case windGusts10mNbmConus = "wind_gusts_10m_ncep_nbm_conus"
-
-    // Wind - GEM Global
-    case windSpeed10mGemGlobal = "wind_speed_10m_gem_global"
-    case windDirection10mGemGlobal = "wind_direction_10m_gem_global"
-    case windGusts10mGemGlobal = "wind_gusts_10m_gem_global"
-
-    // Wind - GEM Regional
-    case windSpeed10mGemRegional = "wind_speed_10m_gem_regional"
-    case windDirection10mGemRegional = "wind_direction_10m_gem_regional"
-    case windGusts10mGemRegional = "wind_gusts_10m_gem_regional"
-
-    // Wind - GEM HRDPS Continental
-    case windSpeed10mGemHrdpsContinental = "wind_speed_10m_gem_hrdps_continental"
-    case windDirection10mGemHrdpsContinental = "wind_direction_10m_gem_hrdps_continental"
-    case windGusts10mGemHrdpsContinental = "wind_gusts_10m_gem_hrdps_continental"
-
-    // Precipitation - ECMWF IFS
-    case precipitationEcmwfIfs025 = "precipitation_ecmwf_ifs025"
-    case rainEcmwfIfs025 = "rain_ecmwf_ifs025"
-    case showersEcmwfIfs025 = "showers_ecmwf_ifs025"
-    case snowfallEcmwfIfs025 = "snowfall_ecmwf_ifs025"
-    case precipitationProbabilityEcmwfIfs025 = "precipitation_probability_ecmwf_ifs025"
-
-    // Precipitation - ECMWF AIFS
-    case precipitationEcmwfAifs025 = "precipitation_ecmwf_aifs025"
-    case rainEcmwfAifs025 = "rain_ecmwf_aifs025"
-    case showersEcmwfAifs025 = "showers_ecmwf_aifs025"
-    case snowfallEcmwfAifs025 = "snowfall_ecmwf_aifs025"
-    case precipitationProbabilityEcmwfAifs025 = "precipitation_probability_ecmwf_aifs025"
-
-    // Precipitation - Icon Seamless
-    case precipitationIconSeamless = "precipitation_icon_seamless"
-    case rainIconSeamless = "rain_icon_seamless"
-    case showersIconSeamless = "showers_icon_seamless"
-    case snowfallIconSeamless = "snowfall_icon_seamless"
-    case precipitationProbabilityIconSeamless = "precipitation_probability_icon_seamless"
-
-    // Precipitation - GFS Seamless
-    case precipitationGfsSeamless = "precipitation_gfs_seamless"
-    case rainGfsSeamless = "rain_gfs_seamless"
-    case showersGfsSeamless = "showers_gfs_seamless"
-    case snowfallGfsSeamless = "snowfall_gfs_seamless"
-    case precipitationProbabilityGfsSeamless = "precipitation_probability_gfs_seamless"
-
-    // Precipitation - HRRR
-    case precipitationHrrrConus = "precipitation_ncep_hrrr_conus"
-    case rainHrrrConus = "rain_ncep_hrrr_conus"
-    case showersHrrrConus = "showers_ncep_hrrr_conus"
-    case snowfallHrrrConus = "snowfall_ncep_hrrr_conus"
-    case precipitationProbabilityHrrrConus = "precipitation_probability_ncep_hrrr_conus"
-
-    // Precipitation - NBM
-    case precipitationNbmConus = "precipitation_ncep_nbm_conus"
-    case rainNbmConus = "rain_ncep_nbm_conus"
-    case showersNbmConus = "showers_ncep_nbm_conus"
-    case snowfallNbmConus = "snowfall_ncep_nbm_conus"
-    case precipitationProbabilityNbmConus = "precipitation_probability_ncep_nbm_conus"
-
-    // Precipitation - GEM Global
-    case precipitationGemGlobal = "precipitation_gem_global"
-    case rainGemGlobal = "rain_gem_global"
-    case showersGemGlobal = "showers_gem_global"
-    case snowfallGemGlobal = "snowfall_gem_global"
-    case precipitationProbabilityGemGlobal = "precipitation_probability_gem_global"
-
-    // Precipitation - GEM Regional
-    case precipitationGemRegional = "precipitation_gem_regional"
-    case rainGemRegional = "rain_gem_regional"
-    case showersGemRegional = "showers_gem_regional"
-    case snowfallGemRegional = "snowfall_gem_regional"
-    case precipitationProbabilityGemRegional = "precipitation_probability_gem_regional"
-
-    // Precipitation - GEM HRDPS Continental
-    case precipitationGemHrdpsContinental = "precipitation_gem_hrdps_continental"
-    case rainGemHrdpsContinental = "rain_gem_hrdps_continental"
-    case showersGemHrdpsContinental = "showers_gem_hrdps_continental"
-    case snowfallGemHrdpsContinental = "snowfall_gem_hrdps_continental"
-    case precipitationProbabilityGemHrdpsContinental = "precipitation_probability_gem_hrdps_continental"
-
-    // Weather code
-    case weatherCodeEcmwfIfs025 = "weather_code_ecmwf_ifs025"
-    case weatherCodeEcmwfAifs025 = "weather_code_ecmwf_aifs025"
-    case weatherCodeIconSeamless = "weather_code_icon_seamless"
-    case weatherCodeGfsSeamless = "weather_code_gfs_seamless"
-    case weatherCodeHrrrConus = "weather_code_ncep_hrrr_conus"
-    case weatherCodeNbmConus = "weather_code_ncep_nbm_conus"
-    case weatherCodeGemGlobal = "weather_code_gem_global"
-    case weatherCodeGemRegional = "weather_code_gem_regional"
-    case weatherCodeGemHrdpsContinental = "weather_code_gem_hrdps_continental"
-
-    // Temperature
-    case temperature2mEcmwfIfs025 = "temperature_2m_ecmwf_ifs025"
-    case temperature2mEcmwfAifs025 = "temperature_2m_ecmwf_aifs025"
-    case temperature2mIconSeamless = "temperature_2m_icon_seamless"
-    case temperature2mGfsSeamless = "temperature_2m_gfs_seamless"
-    case temperature2mHrrrConus = "temperature_2m_ncep_hrrr_conus"
-    case temperature2mNbmConus = "temperature_2m_ncep_nbm_conus"
-    case temperature2mGemGlobal = "temperature_2m_gem_global"
-    case temperature2mGemRegional = "temperature_2m_gem_regional"
-    case temperature2mGemHrdpsContinental = "temperature_2m_gem_hrdps_continental"
-
-    // Freezing level height (only GFS and ICON)
-    case freezingLevelHeightIconSeamless = "freezing_level_height_icon_seamless"
-    case freezingLevelHeightGfsSeamless = "freezing_level_height_gfs_seamless"
-
-    // Cloud cover
-    case cloudCoverEcmwfIfs025 = "cloud_cover_ecmwf_ifs025"
-    case cloudCoverEcmwfAifs025 = "cloud_cover_ecmwf_aifs025"
-    case cloudCoverIconSeamless = "cloud_cover_icon_seamless"
-    case cloudCoverGfsSeamless = "cloud_cover_gfs_seamless"
-    case cloudCoverHrrrConus = "cloud_cover_ncep_hrrr_conus"
-    case cloudCoverNbmConus = "cloud_cover_ncep_nbm_conus"
-    case cloudCoverGemGlobal = "cloud_cover_gem_global"
-    case cloudCoverGemRegional = "cloud_cover_gem_regional"
-    case cloudCoverGemHrdpsContinental = "cloud_cover_gem_hrdps_continental"
+  /// Determines which `WeatherModel` cases are present by matching the suffix of
+  /// decoded field keys (e.g. a key ending in `_gem_global` implies `.gemGlobal`).
+  private static func presentModels(in keys: Set<String>) -> Set<WeatherModel> {
+    var result: Set<WeatherModel> = []
+    for model in WeatherModel.allCases {
+      let suffix = "_\(model.rawValue)"
+      if keys.contains(where: { $0.hasSuffix(suffix) }) {
+        result.insert(model)
+      }
+    }
+    return result
   }
 }
 
-private struct RawHourlyData: Decodable {
-  let time: [String]
-
-  // Wind data - ECMWF IFS
-  let windSpeed10mEcmwfIfs025: [Double?]?
-  let windDirection10mEcmwfIfs025: [Int?]?
-  let windGusts10mEcmwfIfs025: [Double?]?
-
-  // Wind data - ECMWF AIFS
-  let windSpeed10mEcmwfAifs025: [Double?]?
-  let windDirection10mEcmwfAifs025: [Int?]?
-  let windGusts10mEcmwfAifs025: [Double?]?
-
-  // Wind data - Icon Seamless
-  let windSpeed10mIconSeamless: [Double?]?
-  let windDirection10mIconSeamless: [Int?]?
-  let windGusts10mIconSeamless: [Double?]?
-
-  // Wind data - GFS Seamless
-  let windSpeed10mGfsSeamless: [Double?]?
-  let windDirection10mGfsSeamless: [Int?]?
-  let windGusts10mGfsSeamless: [Double?]?
-
-  // Wind data - HRRR
-  let windSpeed10mHrrrConus: [Double?]?
-  let windDirection10mHrrrConus: [Int?]?
-  let windGusts10mHrrrConus: [Double?]?
-
-  // Wind data - NBM
-  let windSpeed10mNbmConus: [Double?]?
-  let windDirection10mNbmConus: [Int?]?
-  let windGusts10mNbmConus: [Double?]?
-
-  // Wind data - GEM Global
-  let windSpeed10mGemGlobal: [Double?]?
-  let windDirection10mGemGlobal: [Int?]?
-  let windGusts10mGemGlobal: [Double?]?
-
-  // Wind data - GEM Regional
-  let windSpeed10mGemRegional: [Double?]?
-  let windDirection10mGemRegional: [Int?]?
-  let windGusts10mGemRegional: [Double?]?
-
-  // Wind data - GEM HRDPS Continental
-  let windSpeed10mGemHrdpsContinental: [Double?]?
-  let windDirection10mGemHrdpsContinental: [Int?]?
-  let windGusts10mGemHrdpsContinental: [Double?]?
-
-  // Precipitation data - ECMWF IFS
-  let precipitationEcmwfIfs025: [Double?]?
-  let rainEcmwfIfs025: [Double?]?
-  let showersEcmwfIfs025: [Double?]?
-  let snowfallEcmwfIfs025: [Double?]?
-  let precipitationProbabilityEcmwfIfs025: [Int?]?
-
-  // Precipitation data - ECMWF AIFS
-  let precipitationEcmwfAifs025: [Double?]?
-  let rainEcmwfAifs025: [Double?]?
-  let showersEcmwfAifs025: [Double?]?
-  let snowfallEcmwfAifs025: [Double?]?
-  let precipitationProbabilityEcmwfAifs025: [Int?]?
-
-  // Precipitation data - Icon Seamless
-  let precipitationIconSeamless: [Double?]?
-  let rainIconSeamless: [Double?]?
-  let showersIconSeamless: [Double?]?
-  let snowfallIconSeamless: [Double?]?
-  let precipitationProbabilityIconSeamless: [Int?]?
-
-  // Precipitation data - GFS Seamless
-  let precipitationGfsSeamless: [Double?]?
-  let rainGfsSeamless: [Double?]?
-  let showersGfsSeamless: [Double?]?
-  let snowfallGfsSeamless: [Double?]?
-  let precipitationProbabilityGfsSeamless: [Int?]?
-
-  // Precipitation data - HRRR
-  let precipitationHrrrConus: [Double?]?
-  let rainHrrrConus: [Double?]?
-  let showersHrrrConus: [Double?]?
-  let snowfallHrrrConus: [Double?]?
-  let precipitationProbabilityHrrrConus: [Int?]?
-
-  // Precipitation data - NBM
-  let precipitationNbmConus: [Double?]?
-  let rainNbmConus: [Double?]?
-  let showersNbmConus: [Double?]?
-  let snowfallNbmConus: [Double?]?
-  let precipitationProbabilityNbmConus: [Int?]?
-
-  // Precipitation data - GEM Global
-  let precipitationGemGlobal: [Double?]?
-  let rainGemGlobal: [Double?]?
-  let showersGemGlobal: [Double?]?
-  let snowfallGemGlobal: [Double?]?
-  let precipitationProbabilityGemGlobal: [Int?]?
-
-  // Precipitation data - GEM Regional
-  let precipitationGemRegional: [Double?]?
-  let rainGemRegional: [Double?]?
-  let showersGemRegional: [Double?]?
-  let snowfallGemRegional: [Double?]?
-  let precipitationProbabilityGemRegional: [Int?]?
-
-  // Precipitation data - GEM HRDPS Continental
-  let precipitationGemHrdpsContinental: [Double?]?
-  let rainGemHrdpsContinental: [Double?]?
-  let showersGemHrdpsContinental: [Double?]?
-  let snowfallGemHrdpsContinental: [Double?]?
-  let precipitationProbabilityGemHrdpsContinental: [Int?]?
-
-  // Weather code data
-  let weatherCodeEcmwfIfs025: [Int?]?
-  let weatherCodeEcmwfAifs025: [Int?]?
-  let weatherCodeIconSeamless: [Int?]?
-  let weatherCodeGfsSeamless: [Int?]?
-  let weatherCodeHrrrConus: [Int?]?
-  let weatherCodeNbmConus: [Int?]?
-  let weatherCodeGemGlobal: [Int?]?
-  let weatherCodeGemRegional: [Int?]?
-  let weatherCodeGemHrdpsContinental: [Int?]?
-
-  // Temperature data
-  let temperature2mEcmwfIfs025: [Double?]?
-  let temperature2mEcmwfAifs025: [Double?]?
-  let temperature2mIconSeamless: [Double?]?
-  let temperature2mGfsSeamless: [Double?]?
-  let temperature2mHrrrConus: [Double?]?
-  let temperature2mNbmConus: [Double?]?
-  let temperature2mGemGlobal: [Double?]?
-  let temperature2mGemRegional: [Double?]?
-  let temperature2mGemHrdpsContinental: [Double?]?
-
-  // Freezing level height data (only supported by GFS and ICON)
-  let freezingLevelHeightIconSeamless: [Double?]?
-  let freezingLevelHeightGfsSeamless: [Double?]?
-
-  // Cloud cover data
-  let cloudCoverEcmwfIfs025: [Int?]?
-  let cloudCoverEcmwfAifs025: [Int?]?
-  let cloudCoverIconSeamless: [Int?]?
-  let cloudCoverGfsSeamless: [Int?]?
-  let cloudCoverHrrrConus: [Int?]?
-  let cloudCoverNbmConus: [Int?]?
-  let cloudCoverGemGlobal: [Int?]?
-  let cloudCoverGemRegional: [Int?]?
-  let cloudCoverGemHrdpsContinental: [Int?]?
-
-  enum CodingKeys: String, CodingKey {
-    case time
-
-    // Wind - ECMWF IFS
-    case windSpeed10mEcmwfIfs025 = "wind_speed_10m_ecmwf_ifs025"
-    case windDirection10mEcmwfIfs025 = "wind_direction_10m_ecmwf_ifs025"
-    case windGusts10mEcmwfIfs025 = "wind_gusts_10m_ecmwf_ifs025"
-
-    // Wind - ECMWF AIFS
-    case windSpeed10mEcmwfAifs025 = "wind_speed_10m_ecmwf_aifs025"
-    case windDirection10mEcmwfAifs025 = "wind_direction_10m_ecmwf_aifs025"
-    case windGusts10mEcmwfAifs025 = "wind_gusts_10m_ecmwf_aifs025"
-
-    // Wind - Icon Seamless
-    case windSpeed10mIconSeamless = "wind_speed_10m_icon_seamless"
-    case windDirection10mIconSeamless = "wind_direction_10m_icon_seamless"
-    case windGusts10mIconSeamless = "wind_gusts_10m_icon_seamless"
-
-    // Wind - GFS Seamless
-    case windSpeed10mGfsSeamless = "wind_speed_10m_gfs_seamless"
-    case windDirection10mGfsSeamless = "wind_direction_10m_gfs_seamless"
-    case windGusts10mGfsSeamless = "wind_gusts_10m_gfs_seamless"
-
-    // Wind - HRRR
-    case windSpeed10mHrrrConus = "wind_speed_10m_ncep_hrrr_conus"
-    case windDirection10mHrrrConus = "wind_direction_10m_ncep_hrrr_conus"
-    case windGusts10mHrrrConus = "wind_gusts_10m_ncep_hrrr_conus"
-
-    // Wind - NBM
-    case windSpeed10mNbmConus = "wind_speed_10m_ncep_nbm_conus"
-    case windDirection10mNbmConus = "wind_direction_10m_ncep_nbm_conus"
-    case windGusts10mNbmConus = "wind_gusts_10m_ncep_nbm_conus"
-
-    // Wind - GEM Global
-    case windSpeed10mGemGlobal = "wind_speed_10m_gem_global"
-    case windDirection10mGemGlobal = "wind_direction_10m_gem_global"
-    case windGusts10mGemGlobal = "wind_gusts_10m_gem_global"
-
-    // Wind - GEM Regional
-    case windSpeed10mGemRegional = "wind_speed_10m_gem_regional"
-    case windDirection10mGemRegional = "wind_direction_10m_gem_regional"
-    case windGusts10mGemRegional = "wind_gusts_10m_gem_regional"
-
-    // Wind - GEM HRDPS Continental
-    case windSpeed10mGemHrdpsContinental = "wind_speed_10m_gem_hrdps_continental"
-    case windDirection10mGemHrdpsContinental = "wind_direction_10m_gem_hrdps_continental"
-    case windGusts10mGemHrdpsContinental = "wind_gusts_10m_gem_hrdps_continental"
-
-    // Precipitation - ECMWF IFS
-    case precipitationEcmwfIfs025 = "precipitation_ecmwf_ifs025"
-    case rainEcmwfIfs025 = "rain_ecmwf_ifs025"
-    case showersEcmwfIfs025 = "showers_ecmwf_ifs025"
-    case snowfallEcmwfIfs025 = "snowfall_ecmwf_ifs025"
-    case precipitationProbabilityEcmwfIfs025 = "precipitation_probability_ecmwf_ifs025"
-
-    // Precipitation - ECMWF AIFS
-    case precipitationEcmwfAifs025 = "precipitation_ecmwf_aifs025"
-    case rainEcmwfAifs025 = "rain_ecmwf_aifs025"
-    case showersEcmwfAifs025 = "showers_ecmwf_aifs025"
-    case snowfallEcmwfAifs025 = "snowfall_ecmwf_aifs025"
-    case precipitationProbabilityEcmwfAifs025 = "precipitation_probability_ecmwf_aifs025"
-
-    // Precipitation - Icon Seamless
-    case precipitationIconSeamless = "precipitation_icon_seamless"
-    case rainIconSeamless = "rain_icon_seamless"
-    case showersIconSeamless = "showers_icon_seamless"
-    case snowfallIconSeamless = "snowfall_icon_seamless"
-    case precipitationProbabilityIconSeamless = "precipitation_probability_icon_seamless"
-
-    // Precipitation - GFS Seamless
-    case precipitationGfsSeamless = "precipitation_gfs_seamless"
-    case rainGfsSeamless = "rain_gfs_seamless"
-    case showersGfsSeamless = "showers_gfs_seamless"
-    case snowfallGfsSeamless = "snowfall_gfs_seamless"
-    case precipitationProbabilityGfsSeamless = "precipitation_probability_gfs_seamless"
-
-    // Precipitation - HRRR
-    case precipitationHrrrConus = "precipitation_ncep_hrrr_conus"
-    case rainHrrrConus = "rain_ncep_hrrr_conus"
-    case showersHrrrConus = "showers_ncep_hrrr_conus"
-    case snowfallHrrrConus = "snowfall_ncep_hrrr_conus"
-    case precipitationProbabilityHrrrConus = "precipitation_probability_ncep_hrrr_conus"
-
-    // Precipitation - NBM
-    case precipitationNbmConus = "precipitation_ncep_nbm_conus"
-    case rainNbmConus = "rain_ncep_nbm_conus"
-    case showersNbmConus = "showers_ncep_nbm_conus"
-    case snowfallNbmConus = "snowfall_ncep_nbm_conus"
-    case precipitationProbabilityNbmConus = "precipitation_probability_ncep_nbm_conus"
-
-    // Precipitation - GEM Global
-    case precipitationGemGlobal = "precipitation_gem_global"
-    case rainGemGlobal = "rain_gem_global"
-    case showersGemGlobal = "showers_gem_global"
-    case snowfallGemGlobal = "snowfall_gem_global"
-    case precipitationProbabilityGemGlobal = "precipitation_probability_gem_global"
-
-    // Precipitation - GEM Regional
-    case precipitationGemRegional = "precipitation_gem_regional"
-    case rainGemRegional = "rain_gem_regional"
-    case showersGemRegional = "showers_gem_regional"
-    case snowfallGemRegional = "snowfall_gem_regional"
-    case precipitationProbabilityGemRegional = "precipitation_probability_gem_regional"
-
-    // Precipitation - GEM HRDPS Continental
-    case precipitationGemHrdpsContinental = "precipitation_gem_hrdps_continental"
-    case rainGemHrdpsContinental = "rain_gem_hrdps_continental"
-    case showersGemHrdpsContinental = "showers_gem_hrdps_continental"
-    case snowfallGemHrdpsContinental = "snowfall_gem_hrdps_continental"
-    case precipitationProbabilityGemHrdpsContinental = "precipitation_probability_gem_hrdps_continental"
-
-    // Weather code
-    case weatherCodeEcmwfIfs025 = "weather_code_ecmwf_ifs025"
-    case weatherCodeEcmwfAifs025 = "weather_code_ecmwf_aifs025"
-    case weatherCodeIconSeamless = "weather_code_icon_seamless"
-    case weatherCodeGfsSeamless = "weather_code_gfs_seamless"
-    case weatherCodeHrrrConus = "weather_code_ncep_hrrr_conus"
-    case weatherCodeNbmConus = "weather_code_ncep_nbm_conus"
-    case weatherCodeGemGlobal = "weather_code_gem_global"
-    case weatherCodeGemRegional = "weather_code_gem_regional"
-    case weatherCodeGemHrdpsContinental = "weather_code_gem_hrdps_continental"
-
-    // Temperature
-    case temperature2mEcmwfIfs025 = "temperature_2m_ecmwf_ifs025"
-    case temperature2mEcmwfAifs025 = "temperature_2m_ecmwf_aifs025"
-    case temperature2mIconSeamless = "temperature_2m_icon_seamless"
-    case temperature2mGfsSeamless = "temperature_2m_gfs_seamless"
-    case temperature2mHrrrConus = "temperature_2m_ncep_hrrr_conus"
-    case temperature2mNbmConus = "temperature_2m_ncep_nbm_conus"
-    case temperature2mGemGlobal = "temperature_2m_gem_global"
-    case temperature2mGemRegional = "temperature_2m_gem_regional"
-    case temperature2mGemHrdpsContinental = "temperature_2m_gem_hrdps_continental"
-
-    // Freezing level height (only GFS and ICON)
-    case freezingLevelHeightIconSeamless = "freezing_level_height_icon_seamless"
-    case freezingLevelHeightGfsSeamless = "freezing_level_height_gfs_seamless"
-
-    // Cloud cover
-    case cloudCoverEcmwfIfs025 = "cloud_cover_ecmwf_ifs025"
-    case cloudCoverEcmwfAifs025 = "cloud_cover_ecmwf_aifs025"
-    case cloudCoverIconSeamless = "cloud_cover_icon_seamless"
-    case cloudCoverGfsSeamless = "cloud_cover_gfs_seamless"
-    case cloudCoverHrrrConus = "cloud_cover_ncep_hrrr_conus"
-    case cloudCoverNbmConus = "cloud_cover_ncep_nbm_conus"
-    case cloudCoverGemGlobal = "cloud_cover_gem_global"
-    case cloudCoverGemRegional = "cloud_cover_gem_regional"
-    case cloudCoverGemHrdpsContinental = "cloud_cover_gem_hrdps_continental"
-  }
-}
+// MARK: - Hourly
 
 public struct HourlyData {
   public let time: Date
@@ -1183,13 +645,145 @@ public struct WeatherModelData {
   public let temperature: Double?
   public let temperatureUnit: String?
 
-  // Freezing level height (altitude of 0°C level, only available for GFS and ICON models)
+  // Additional thermodynamic fields
+  public let apparentTemperature: Double?
+  public let apparentTemperatureUnit: String?
+  public let dewPoint: Double?
+  public let dewPointUnit: String?
+  public let relativeHumidity: Double?
+  public let relativeHumidityUnit: String?
+  public let pressureMsl: Double?
+  public let pressureMslUnit: String?
+  public let isDay: Bool?
+
+  // Freezing level height (altitude of 0°C level; not provided by every model)
   public let freezingLevelHeight: Double?
   public let freezingLevelHeightUnit: String?
 
   // Cloud cover data (0-100%)
   public let cloudCover: Int?
   public let cloudCoverUnit: String?
+
+  public init(
+    windSpeed: Double? = nil,
+    windDirection: Int? = nil,
+    windGusts: Double? = nil,
+    windSpeedUnit: String? = nil,
+    windDirectionUnit: String? = nil,
+    windGustsUnit: String? = nil,
+    precipitation: Double? = nil,
+    rain: Double? = nil,
+    showers: Double? = nil,
+    snowfall: Double? = nil,
+    precipitationProbability: Int? = nil,
+    precipitationUnit: String? = nil,
+    rainUnit: String? = nil,
+    showersUnit: String? = nil,
+    snowfallUnit: String? = nil,
+    precipitationProbabilityUnit: String? = nil,
+    weatherCode: Int? = nil,
+    weatherCodeUnit: String? = nil,
+    temperature: Double? = nil,
+    temperatureUnit: String? = nil,
+    apparentTemperature: Double? = nil,
+    apparentTemperatureUnit: String? = nil,
+    dewPoint: Double? = nil,
+    dewPointUnit: String? = nil,
+    relativeHumidity: Double? = nil,
+    relativeHumidityUnit: String? = nil,
+    pressureMsl: Double? = nil,
+    pressureMslUnit: String? = nil,
+    isDay: Bool? = nil,
+    freezingLevelHeight: Double? = nil,
+    freezingLevelHeightUnit: String? = nil,
+    cloudCover: Int? = nil,
+    cloudCoverUnit: String? = nil
+  ) {
+    self.windSpeed = windSpeed
+    self.windDirection = windDirection
+    self.windGusts = windGusts
+    self.windSpeedUnit = windSpeedUnit
+    self.windDirectionUnit = windDirectionUnit
+    self.windGustsUnit = windGustsUnit
+    self.precipitation = precipitation
+    self.rain = rain
+    self.showers = showers
+    self.snowfall = snowfall
+    self.precipitationProbability = precipitationProbability
+    self.precipitationUnit = precipitationUnit
+    self.rainUnit = rainUnit
+    self.showersUnit = showersUnit
+    self.snowfallUnit = snowfallUnit
+    self.precipitationProbabilityUnit = precipitationProbabilityUnit
+    self.weatherCode = weatherCode
+    self.weatherCodeUnit = weatherCodeUnit
+    self.temperature = temperature
+    self.temperatureUnit = temperatureUnit
+    self.apparentTemperature = apparentTemperature
+    self.apparentTemperatureUnit = apparentTemperatureUnit
+    self.dewPoint = dewPoint
+    self.dewPointUnit = dewPointUnit
+    self.relativeHumidity = relativeHumidity
+    self.relativeHumidityUnit = relativeHumidityUnit
+    self.pressureMsl = pressureMsl
+    self.pressureMslUnit = pressureMslUnit
+    self.isDay = isDay
+    self.freezingLevelHeight = freezingLevelHeight
+    self.freezingLevelHeightUnit = freezingLevelHeightUnit
+    self.cloudCover = cloudCover
+    self.cloudCoverUnit = cloudCoverUnit
+  }
+}
+
+// MARK: - Daily
+
+public struct DailyData {
+  public let date: Date
+  public let models: [WeatherModel: DailyModelData]
+
+  public subscript(model: WeatherModel) -> DailyModelData? {
+    return models[model]
+  }
+}
+
+public struct DailyModelData {
+  public let temperatureMax: Double?
+  public let temperatureMin: Double?
+  public let sunrise: Date?
+  public let sunset: Date?
+  public let precipitationSum: Double?
+  public let snowfallSum: Double?
+  public let precipitationProbabilityMax: Int?
+  public let windSpeedMax: Double?
+  public let windGustsMax: Double?
+  public let weatherCode: Int?
+  public let uvIndexMax: Double?
+
+  public init(
+    temperatureMax: Double? = nil,
+    temperatureMin: Double? = nil,
+    sunrise: Date? = nil,
+    sunset: Date? = nil,
+    precipitationSum: Double? = nil,
+    snowfallSum: Double? = nil,
+    precipitationProbabilityMax: Int? = nil,
+    windSpeedMax: Double? = nil,
+    windGustsMax: Double? = nil,
+    weatherCode: Int? = nil,
+    uvIndexMax: Double? = nil
+  ) {
+    self.temperatureMax = temperatureMax
+    self.temperatureMin = temperatureMin
+    self.sunrise = sunrise
+    self.sunset = sunset
+    self.precipitationSum = precipitationSum
+    self.snowfallSum = snowfallSum
+    self.precipitationProbabilityMax = precipitationProbabilityMax
+    self.windSpeedMax = windSpeedMax
+    self.windGustsMax = windGustsMax
+    self.weatherCode = weatherCode
+    self.uvIndexMax = uvIndexMax
+  }
 }
 
 // MARK: - Freezing Level Response
@@ -1216,11 +810,5 @@ private struct RawFreezingLevelResponse: Decodable {
       case time
       case freezingLevelHeight = "freezing_level_height"
     }
-  }
-}
-
-private extension Array {
-  subscript(safe index: Int) -> Element? {
-    return indices.contains(index) ? self[index] : nil
   }
 }

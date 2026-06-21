@@ -24,7 +24,10 @@ let package = Package(
       name: "OpenMeteoKit"),
     .testTarget(
       name: "OpenMeteoKitTests",
-      dependencies: ["OpenMeteoKit"]
+      dependencies: ["OpenMeteoKit"],
+      resources: [
+        .process("Resources")
+      ]
     ),
   ]
 )
