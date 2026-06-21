@@ -18,6 +18,12 @@ public struct OpenMeteoClient {
   }
 
   /// Appends the apiKey query item (if configured) to the given URL.
+  /// Internal mirror of `applyingAPIKey` usable from extensions in other files.
+  func applyingAPIKeyPublic(to url: URL) -> URL {
+    applyingAPIKey(to: url)
+  }
+
+  /// Appends the apiKey query item (if configured) to the given URL.
   private func applyingAPIKey(to url: URL) -> URL {
     guard let apiKey, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
       return url
