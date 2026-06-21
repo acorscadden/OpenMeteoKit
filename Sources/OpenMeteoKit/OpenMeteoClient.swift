@@ -405,13 +405,13 @@ public struct OpenMeteoWeatherResponse: Decodable {
     // --- Hourly block (dynamic) ---
     let hourlyValues = try Self.decodeDynamicHourly(container, forKey: .hourlyData)
     let hourlyUnits = try Self.decodeDynamicUnits(container, forKey: .hourlyUnits)
-    hourly = Self.buildHourly(values: hourlyValues, units: hourlyUnits)
+    hourly = Self.buildHourly(values: hourlyValues, units: hourlyUnits, utcOffsetSeconds: utcOffsetSeconds)
 
     // --- Daily block (dynamic, optional) ---
     if container.contains(.dailyData) {
       let dailyValues = try Self.decodeDynamicDaily(container, forKey: .dailyData)
       let dailyUnits = try Self.decodeDynamicUnits(container, forKey: .dailyUnits)
-      daily = Self.buildDaily(values: dailyValues, units: dailyUnits)
+      daily = Self.buildDaily(values: dailyValues, units: dailyUnits, utcOffsetSeconds: utcOffsetSeconds)
     } else {
       daily = []
     }
@@ -476,11 +476,15 @@ public struct OpenMeteoWeatherResponse: Decodable {
 
   private static func buildHourly(
     values: (time: [String], fields: [String: [Double?]]),
-    units: [String: String]
+    units: [String: String],
+    utcOffsetSeconds: Int
   ) -> [HourlyData] {
+    // With `timezone=auto` the API returns LOCAL time strings, so parse them in
+    // the location's timezone (via the response's utc offset). Parsing as GMT
+    // would shift every timestamp by the offset and push "today" into yesterday.
     let formatter = DateFormatter()
     formatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
-    formatter.timeZone = TimeZone(abbreviation: "GMT")
+    formatter.timeZone = TimeZone(secondsFromGMT: utcOffsetSeconds) ?? TimeZone(abbreviation: "GMT")
 
     // Determine which models are present from the decoded field keys.
     let models = presentModels(in: Set(values.fields.keys))
@@ -545,15 +549,19 @@ public struct OpenMeteoWeatherResponse: Decodable {
 
   private static func buildDaily(
     values: (time: [String], strings: [String: [String?]], fields: [String: [Double?]]),
-    units: [String: String]
+    units: [String: String],
+    utcOffsetSeconds: Int
   ) -> [DailyData] {
+    // `timezone=auto` → local date/time strings; parse in the location's timezone
+    // so day boundaries (and sunrise/sunset) land on the correct calendar day.
+    let zone = TimeZone(secondsFromGMT: utcOffsetSeconds) ?? TimeZone(abbreviation: "GMT")
     let dateFormatter = DateFormatter()
     dateFormatter.dateFormat = "yyyy-MM-dd"
-    dateFormatter.timeZone = TimeZone(abbreviation: "GMT")
+    dateFormatter.timeZone = zone
 
     let dateTimeFormatter = DateFormatter()
     dateTimeFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
-    dateTimeFormatter.timeZone = TimeZone(abbreviation: "GMT")
+    dateTimeFormatter.timeZone = zone
 
     let models = presentModels(in: Set(values.fields.keys).union(values.strings.keys))
 

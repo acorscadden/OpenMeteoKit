@@ -452,3 +452,32 @@ import Foundation
 
   print("✅ All 9 models fetched successfully")
 }
+
+/// Regression test: with `timezone=auto` the API returns LOCAL time strings, so
+/// the decoder must parse them in the location's timezone (not GMT). If it parses
+/// as GMT, every timestamp shifts by the UTC offset and "today" slips into
+/// yesterday. Verifies the first hour is local midnight and the first daily date
+/// matches it on the local calendar.
+@Test func testTimezoneAwareParsing() async throws {
+  let client = OpenMeteoClient()
+  let response = try await client.fetchWeatherData(
+    latitude: 49.2827,
+    longitude: -123.1207,   // Vancouver (UTC-7/-8)
+    models: [.gemHrdpsContinental, .gemGlobal],
+    windSpeedUnit: .knots,
+    forecastDays: 10,
+    includeDaily: true
+  )
+
+  let zone = TimeZone(secondsFromGMT: response.utcOffsetSeconds)!
+  var cal = Calendar(identifier: .gregorian)
+  cal.timeZone = zone
+
+  let firstHour = try #require(response.hourly.first)
+  #expect(cal.component(.hour, from: firstHour.time) == 0,
+          "First hourly sample should be local midnight, got \(cal.component(.hour, from: firstHour.time))")
+
+  let firstDay = try #require(response.daily.first)
+  #expect(cal.isDate(firstDay.date, inSameDayAs: firstHour.time),
+          "First daily date should be the same local calendar day as the first hour")
+}
