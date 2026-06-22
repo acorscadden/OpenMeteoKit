@@ -481,3 +481,20 @@ import Foundation
   #expect(cal.isDate(firstDay.date, inSameDayAs: firstHour.time),
           "First daily date should be the same local calendar day as the first hour")
 }
+
+/// Regression test for the single-model attribution bug: a standalone model is
+/// requested ALONE (no tail), so Open-Meteo returns UN-suffixed keys. The decoder
+/// must attribute them to the requested model — otherwise these models silently
+/// decode to no data and the app falls back to WeatherKit.
+@Test func testSingleStandaloneModelDecodes() async throws {
+  let client = OpenMeteoClient()
+  for model in [WeatherModel.gfsSeamless, .iconSeamless, .ecmwfIfs025, .gemGlobal] {
+    let response = try await client.fetchWeatherData(
+      latitude: 46.02, longitude: 7.76, models: [model],
+      windSpeedUnit: .kmh, forecastDays: 7, includeDaily: true
+    )
+    let firstHour = try #require(response.hourly.first, "\(model.rawValue): hourly empty")
+    #expect(firstHour[model]?.temperature != nil, "\(model.rawValue): temperature missing")
+    #expect(response.daily.first?[model]?.temperatureMax != nil, "\(model.rawValue): daily max missing")
+  }
+}

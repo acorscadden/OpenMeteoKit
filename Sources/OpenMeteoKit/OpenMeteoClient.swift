@@ -87,7 +87,11 @@ public struct OpenMeteoClient {
     }
 
     do {
-      return try JSONDecoder().decode(OpenMeteoWeatherResponse.self, from: data)
+      let decoder = JSONDecoder()
+      // Tell the decoder which models were requested so a single-model response
+      // (un-suffixed keys) is attributed to that model.
+      decoder.userInfo[OpenMeteoWeatherResponse.requestedModelsKey] = models
+      return try decoder.decode(OpenMeteoWeatherResponse.self, from: data)
     } catch {
       throw OpenMeteoError.decodingError(error)
     }
@@ -199,7 +203,7 @@ public struct OpenMeteoClient {
   }
 }
 
-public enum WeatherModel: String, CaseIterable {
+public enum WeatherModel: String, CaseIterable, Sendable {
   // European models
   case ecmwfIfs025 = "ecmwf_ifs025"
   case ecmwfAifs025 = "ecmwf_aifs025"
@@ -382,6 +386,12 @@ public struct OpenMeteoWeatherResponse: Decodable {
     case dailyData = "daily"
   }
 
+  /// Pass the requested `[WeatherModel]` here (via `JSONDecoder.userInfo`) so the
+  /// decoder can attribute a SINGLE-model response — which Open-Meteo returns with
+  /// UN-suffixed keys (`temperature_2m`, not `temperature_2m_gfs_seamless`) — to
+  /// that model. Without it, single-model requests decode to zero models.
+  public static let requestedModelsKey = CodingUserInfoKey(rawValue: "OpenMeteoKit.requestedModels")!
+
   /// A `CodingKey` that accepts any string key, used to decode the variable
   /// per-model field set returned by Open-Meteo (e.g. `temperature_2m_gem_global`).
   private struct DynamicKey: CodingKey {
@@ -402,19 +412,43 @@ public struct OpenMeteoWeatherResponse: Decodable {
     timezoneAbbreviation = try container.decode(String.self, forKey: .timezoneAbbreviation)
     elevation = try container.decode(Double.self, forKey: .elevation)
 
+    // A single-model request comes back with un-suffixed keys; attribute them to
+    // that one model so the suffix-based per-model lookup works uniformly.
+    let singleModel = (decoder.userInfo[Self.requestedModelsKey] as? [WeatherModel]).flatMap {
+      $0.count == 1 ? $0.first : nil
+    }
+
     // --- Hourly block (dynamic) ---
-    let hourlyValues = try Self.decodeDynamicHourly(container, forKey: .hourlyData)
-    let hourlyUnits = try Self.decodeDynamicUnits(container, forKey: .hourlyUnits)
+    var hourlyValues = try Self.decodeDynamicHourly(container, forKey: .hourlyData)
+    var hourlyUnits = try Self.decodeDynamicUnits(container, forKey: .hourlyUnits)
+    if let m = singleModel {
+      hourlyValues.fields = Self.suffixed(hourlyValues.fields, with: m)
+      hourlyUnits = Self.suffixed(hourlyUnits, with: m)
+    }
     hourly = Self.buildHourly(values: hourlyValues, units: hourlyUnits, utcOffsetSeconds: utcOffsetSeconds)
 
     // --- Daily block (dynamic, optional) ---
     if container.contains(.dailyData) {
-      let dailyValues = try Self.decodeDynamicDaily(container, forKey: .dailyData)
-      let dailyUnits = try Self.decodeDynamicUnits(container, forKey: .dailyUnits)
+      var dailyValues = try Self.decodeDynamicDaily(container, forKey: .dailyData)
+      var dailyUnits = try Self.decodeDynamicUnits(container, forKey: .dailyUnits)
+      if let m = singleModel {
+        dailyValues.fields = Self.suffixed(dailyValues.fields, with: m)
+        dailyValues.strings = Self.suffixed(dailyValues.strings, with: m)
+        dailyUnits = Self.suffixed(dailyUnits, with: m)
+      }
       daily = Self.buildDaily(values: dailyValues, units: dailyUnits, utcOffsetSeconds: utcOffsetSeconds)
     } else {
       daily = []
     }
+  }
+
+  /// Append `_<model>` to every key so an un-suffixed single-model response matches
+  /// the suffix-based per-model lookup used for multi-model responses.
+  private static func suffixed<T>(_ dict: [String: T], with model: WeatherModel) -> [String: T] {
+    var out: [String: T] = [:]
+    out.reserveCapacity(dict.count)
+    for (key, value) in dict { out["\(key)_\(model.rawValue)"] = value }
+    return out
   }
 
   /// Decodes a block keyed by full field names. `time` is `[String]`; all other
