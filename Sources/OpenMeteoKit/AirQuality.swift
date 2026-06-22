@@ -15,6 +15,10 @@ public struct AirQualityForecast: Sendable {
     public let date: Date
     public let uvIndex: Double?
     public let usAQI: Int?
+    public let europeanAQI: Int?
+    /// Canadian Air Quality Health Index (1–10+), computed from O3/NO2/PM2.5 since
+    /// Open-Meteo doesn't expose it directly. nil when components are missing.
+    public let canadianAQHI: Int?
     /// PM2.5 in µg/m³ — the fine-particulate (wildfire smoke) measure.
     public let pm2_5: Double?
   }
@@ -43,7 +47,9 @@ extension OpenMeteoClient {
     components.queryItems = [
       URLQueryItem(name: "latitude", value: String(latitude)),
       URLQueryItem(name: "longitude", value: String(longitude)),
-      URLQueryItem(name: "hourly", value: "uv_index,us_aqi,pm2_5"),
+      // us_aqi + european_aqi are returned directly; canadian AQHI is computed
+      // from ozone/nitrogen_dioxide/pm2_5 (Open-Meteo has no AQHI field).
+      URLQueryItem(name: "hourly", value: "uv_index,us_aqi,european_aqi,pm2_5,ozone,nitrogen_dioxide"),
       URLQueryItem(name: "forecast_days", value: String(min(forecastDays, 7))),
       URLQueryItem(name: "timezone", value: "auto")
     ]
@@ -76,14 +82,32 @@ extension OpenMeteoClient {
     var hours: [AirQualityForecast.Hour] = []
     for (index, timeString) in raw.hourly.time.enumerated() {
       guard let date = formatter.date(from: timeString) else { continue }
+      let pm = at(raw.hourly.pm2_5, index)
       hours.append(.init(
         date: date,
         uvIndex: at(raw.hourly.uvIndex, index),
         usAQI: at(raw.hourly.usAQI, index).map(Int.init),
-        pm2_5: at(raw.hourly.pm2_5, index)
+        europeanAQI: at(raw.hourly.europeanAQI, index).map(Int.init),
+        canadianAQHI: aqhi(ozone: at(raw.hourly.ozone, index),
+                           no2: at(raw.hourly.no2, index),
+                           pm2_5: pm),
+        pm2_5: pm
       ))
     }
     return AirQualityForecast(utcOffsetSeconds: raw.utcOffsetSeconds, timezone: raw.timezone, hourly: hours)
+  }
+
+  /// Canadian Air Quality Health Index from O3/NO2 (µg/m³ → ppb) + PM2.5 (µg/m³),
+  /// using the ECCC formula on instantaneous values. Returns nil if any is missing.
+  /// AQHI = (1000/10.4) · [ (e^(0.000537·O3ppb)−1) + (e^(0.000871·NO2ppb)−1) + (e^(0.000487·PM2.5)−1) ]
+  private static func aqhi(ozone: Double?, no2: Double?, pm2_5: Double?) -> Int? {
+    guard let ozone, let no2, let pm2_5 else { return nil }
+    let o3ppb = ozone / 1.96        // O3: 1 ppb ≈ 1.96 µg/m³
+    let no2ppb = no2 / 1.88         // NO2: 1 ppb ≈ 1.88 µg/m³
+    let value = (1000.0 / 10.4) * ((exp(0.000537 * o3ppb) - 1)
+                                   + (exp(0.000871 * no2ppb) - 1)
+                                   + (exp(0.000487 * pm2_5) - 1))
+    return max(1, Int(value.rounded()))
   }
 }
 
@@ -96,12 +120,18 @@ private struct RawAirQualityResponse: Decodable {
     let time: [String]
     let uvIndex: [Double?]?
     let usAQI: [Double?]?
+    let europeanAQI: [Double?]?
     let pm2_5: [Double?]?
+    let ozone: [Double?]?
+    let no2: [Double?]?
     enum CodingKeys: String, CodingKey {
       case time
       case uvIndex = "uv_index"
       case usAQI = "us_aqi"
+      case europeanAQI = "european_aqi"
       case pm2_5 = "pm2_5"
+      case ozone
+      case no2 = "nitrogen_dioxide"
     }
   }
 

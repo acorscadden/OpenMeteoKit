@@ -506,6 +506,8 @@ import Foundation
   #expect(!aq.hourly.isEmpty, "air quality hourly should not be empty")
   #expect(aq.hourly.contains { $0.uvIndex != nil }, "should have some UV values")
   #expect(aq.hourly.contains { $0.usAQI != nil }, "should have some US AQI values")
+  #expect(aq.hourly.contains { $0.europeanAQI != nil }, "should have some European AQI values")
+  #expect(aq.hourly.contains { ($0.canadianAQHI ?? 0) >= 1 }, "should compute Canadian AQHI")
   #expect(aq.hourly.contains { $0.pm2_5 != nil }, "should have some PM2.5 values")
 
   let zone = TimeZone(secondsFromGMT: aq.utcOffsetSeconds)!
