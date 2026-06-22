@@ -498,3 +498,18 @@ import Foundation
     #expect(response.daily.first?[model]?.temperatureMax != nil, "\(model.rawValue): daily max missing")
   }
 }
+
+/// Air-Quality API: UV index + US AQI + PM2.5, parsed in the location timezone.
+@Test func testFetchAirQuality() async throws {
+  let client = OpenMeteoClient()
+  let aq = try await client.fetchAirQuality(latitude: 49.28, longitude: -123.12, forecastDays: 5)
+  #expect(!aq.hourly.isEmpty, "air quality hourly should not be empty")
+  #expect(aq.hourly.contains { $0.uvIndex != nil }, "should have some UV values")
+  #expect(aq.hourly.contains { $0.usAQI != nil }, "should have some US AQI values")
+  #expect(aq.hourly.contains { $0.pm2_5 != nil }, "should have some PM2.5 values")
+
+  let zone = TimeZone(secondsFromGMT: aq.utcOffsetSeconds)!
+  var cal = Calendar(identifier: .gregorian); cal.timeZone = zone
+  let first = try #require(aq.hourly.first)
+  #expect(cal.component(.hour, from: first.date) == 0, "first AQ hour should be local midnight")
+}
