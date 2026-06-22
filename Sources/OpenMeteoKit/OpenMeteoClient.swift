@@ -220,6 +220,7 @@ public enum WeatherModel: String, CaseIterable, Sendable {
   case gemGlobal = "gem_global"
   case gemRegional = "gem_regional"
   case gemHrdpsContinental = "gem_hrdps_continental"
+  case gemHrdpsWest = "gem_hrdps_west"   // 1 km, West Canada (experimental)
 
   // Ensemble models (requires different API endpoint - not yet supported)
   // case gfsEnsemble = "gfs_ensemble_seamless"
@@ -260,6 +261,12 @@ public enum WeatherModel: String, CaseIterable, Sendable {
     case .gemHrdpsContinental:
       return latitude >= 38.0 && latitude <= 70.0 &&
              longitude >= -143.0 && longitude <= -50.0
+
+    // GEM HRDPS West - 1 km nest over the western cordillera (BC, Yukon, W. Alberta,
+    // PNW). Approximate domain; experimental ECCC product.
+    case .gemHrdpsWest:
+      return latitude >= 46.0 && latitude <= 62.0 &&
+             longitude >= -142.0 && longitude <= -110.0
     }
   }
 
@@ -286,6 +293,7 @@ public enum WeatherModel: String, CaseIterable, Sendable {
     case .gemGlobal: return 10
     case .gemRegional: return 3
     case .gemHrdpsContinental: return 2
+    case .gemHrdpsWest: return 2
     }
   }
 
@@ -293,7 +301,7 @@ public enum WeatherModel: String, CaseIterable, Sendable {
   /// Short-range / high-resolution models cannot and must be stitched onto a longer-range tail.
   public var standaloneTenDayCapable: Bool {
     switch self {
-    case .hrrr, .gemHrdpsContinental, .gemRegional:
+    case .hrrr, .gemHrdpsContinental, .gemHrdpsWest, .gemRegional:
       return false
     default:
       return true
@@ -303,7 +311,7 @@ public enum WeatherModel: String, CaseIterable, Sendable {
   /// Whether this is a short-range / high-resolution model.
   public var isHighResolution: Bool {
     switch self {
-    case .hrrr, .gemHrdpsContinental, .gemRegional, .nbm:
+    case .hrrr, .gemHrdpsContinental, .gemHrdpsWest, .gemRegional, .nbm:
       return true
     default:
       return false
@@ -317,7 +325,7 @@ public enum WeatherModel: String, CaseIterable, Sendable {
   ///   - longitude: Longitude in degrees (-180 to 180)
   public func tailModel(latitude: Double, longitude: Double) -> WeatherModel? {
     switch self {
-    case .gemHrdpsContinental:
+    case .gemHrdpsContinental, .gemHrdpsWest:
       return WeatherModel.gemRegional.isAvailable(latitude: latitude, longitude: longitude)
         ? .gemRegional
         : .gemGlobal

@@ -17,7 +17,8 @@ import Foundation
   #expect(WeatherModel.gemGlobal.rawValue == "gem_global")
   #expect(WeatherModel.gemRegional.rawValue == "gem_regional")
   #expect(WeatherModel.gemHrdpsContinental.rawValue == "gem_hrdps_continental")
-  #expect(WeatherModel.allCases.count == 9)
+  #expect(WeatherModel.gemHrdpsWest.rawValue == "gem_hrdps_west")
+  #expect(WeatherModel.allCases.count == 10)
 }
 
 @Test func testAvailableModelsNewYork() {
