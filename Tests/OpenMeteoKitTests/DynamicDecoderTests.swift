@@ -216,8 +216,20 @@ private func loadSample() throws -> OpenMeteoWeatherResponse {
 
 // MARK: - Configurable client
 
-@Test func testClientCustomBaseURLAndKeyDoNotCrash() {
-  // Just verifies the new initializer signature is usable.
-  let client = OpenMeteoClient(baseURL: "https://customer-api.open-meteo.com/v1", apiKey: "test-key")
-  #expect(client != nil)
+@Test func testClientCustomBaseURLAndHeaders() {
+  let client = OpenMeteoClient(
+    baseURL: "https://customer-api.open-meteo.com/v1",
+    headers: ["X-API-Key": "test-key"]
+  )
+  #expect(client.headers == ["X-API-Key": "test-key"])
+}
+
+@Test func testProxyClientDerivesServiceURLs() {
+  let client = OpenMeteoClient.proxy(
+    baseURL: "https://example.com/api/v1/om",
+    headers: ["X-API-Key": "test-key"]
+  )
+  #expect(client.airQualityBaseURL == "https://example.com/api/v1/om/air-quality")
+  #expect(client.ensembleBaseURL == "https://example.com/api/v1/om/ensemble")
+  #expect(client.headers["X-API-Key"] == "test-key")
 }

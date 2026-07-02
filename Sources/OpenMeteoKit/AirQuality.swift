@@ -29,8 +29,6 @@ public struct AirQualityForecast: Sendable {
 
 extension OpenMeteoClient {
 
-  public static let defaultAirQualityBaseURL = "https://air-quality-api.open-meteo.com/v1/air-quality"
-
   /// Fetch hourly UV index, US AQI, and PM2.5 for a location. These are
   /// model-independent (sun + atmosphere), so this is a single light request
   /// regardless of the selected forecast model. Horizon is capped at the AQ
@@ -38,8 +36,7 @@ extension OpenMeteoClient {
   public func fetchAirQuality(
     latitude: Double,
     longitude: Double,
-    forecastDays: Int = 7,
-    airQualityBaseURL: String = OpenMeteoClient.defaultAirQualityBaseURL
+    forecastDays: Int = 7
   ) async throws -> AirQualityForecast {
     guard var components = URLComponents(string: airQualityBaseURL) else {
       throw OpenMeteoError.invalidURL
@@ -53,10 +50,9 @@ extension OpenMeteoClient {
       URLQueryItem(name: "forecast_days", value: String(min(forecastDays, 7))),
       URLQueryItem(name: "timezone", value: "auto")
     ]
-    guard let baseURL = components.url else { throw OpenMeteoError.invalidURL }
-    let url = applyingAPIKeyPublic(to: baseURL)
+    guard let url = components.url else { throw OpenMeteoError.invalidURL }
 
-    let (data, response) = try await URLSession.shared.data(from: url)
+    let (data, response) = try await data(from: url)
     guard let http = response as? HTTPURLResponse, 200...299 ~= http.statusCode else {
       throw OpenMeteoError.invalidResponse
     }
