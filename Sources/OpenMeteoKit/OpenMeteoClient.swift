@@ -9,29 +9,43 @@ import Foundation
 
 public struct OpenMeteoClient {
   private let baseURL: String
-  private let apiKey: String?
+  let airQualityBaseURL: String
+  let ensembleBaseURL: String
+  let headers: [String: String]
   private let session = URLSession.shared
 
-  public init(baseURL: String = "https://api.open-meteo.com/v1", apiKey: String? = nil) {
+  public init(
+    baseURL: String = "https://api.open-meteo.com/v1",
+    airQualityBaseURL: String = "https://air-quality-api.open-meteo.com/v1/air-quality",
+    ensembleBaseURL: String = "https://ensemble-api.open-meteo.com/v1/ensemble",
+    headers: [String: String] = [:]
+  ) {
     self.baseURL = baseURL
-    self.apiKey = apiKey
+    self.airQualityBaseURL = airQualityBaseURL
+    self.ensembleBaseURL = ensembleBaseURL
+    self.headers = headers
   }
 
-  /// Appends the apiKey query item (if configured) to the given URL.
-  /// Internal mirror of `applyingAPIKey` usable from extensions in other files.
-  func applyingAPIKeyPublic(to url: URL) -> URL {
-    applyingAPIKey(to: url)
+  /// A client pointed at a unified proxy that serves all three Open-Meteo
+  /// services under one base URL (`<baseURL>/forecast`, `/air-quality`,
+  /// `/ensemble`), e.g. radar_server's `/api/v1/om`. The proxy injects the
+  /// upstream Open-Meteo key; `headers` carries the proxy's own auth.
+  public static func proxy(baseURL: String, headers: [String: String] = [:]) -> OpenMeteoClient {
+    OpenMeteoClient(
+      baseURL: baseURL,
+      airQualityBaseURL: "\(baseURL)/air-quality",
+      ensembleBaseURL: "\(baseURL)/ensemble",
+      headers: headers
+    )
   }
 
-  /// Appends the apiKey query item (if configured) to the given URL.
-  private func applyingAPIKey(to url: URL) -> URL {
-    guard let apiKey, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-      return url
+  /// Fetches `url` with the client's configured headers applied.
+  func data(from url: URL) async throws -> (Data, URLResponse) {
+    var request = URLRequest(url: url)
+    for (field, value) in headers {
+      request.setValue(value, forHTTPHeaderField: field)
     }
-    var items = components.queryItems ?? []
-    items.append(URLQueryItem(name: "apikey", value: apiKey))
-    components.queryItems = items
-    return components.url ?? url
+    return try await session.data(for: request)
   }
 
   public func fetchFreezingLevel(
@@ -39,13 +53,13 @@ public struct OpenMeteoClient {
     longitude: Double,
     forecastDays: Int = 10
   ) async throws -> FreezingLevelResponse {
-    let url = applyingAPIKey(to: buildFreezingLevelURL(
+    let url = buildFreezingLevelURL(
       latitude: latitude,
       longitude: longitude,
       forecastDays: forecastDays
-    ))
+    )
 
-    let (data, response) = try await session.data(from: url)
+    let (data, response) = try await data(from: url)
 
     guard let httpResponse = response as? HTTPURLResponse,
           200...299 ~= httpResponse.statusCode else {
@@ -69,7 +83,7 @@ public struct OpenMeteoClient {
     forecastDays: Int = 10,
     includeDaily: Bool = true
   ) async throws -> OpenMeteoWeatherResponse {
-    let url = applyingAPIKey(to: buildURL(
+    let url = buildURL(
       latitude: latitude,
       longitude: longitude,
       models: models,
@@ -77,9 +91,9 @@ public struct OpenMeteoClient {
       dataTypes: dataTypes,
       forecastDays: forecastDays,
       includeDaily: includeDaily
-    ))
+    )
 
-    let (data, response) = try await session.data(from: url)
+    let (data, response) = try await data(from: url)
 
     guard let httpResponse = response as? HTTPURLResponse,
           200...299 ~= httpResponse.statusCode else {

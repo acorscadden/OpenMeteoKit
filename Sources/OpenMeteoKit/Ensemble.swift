@@ -194,10 +194,6 @@ extension EnsembleResponse {
 // MARK: - Client
 
 public extension OpenMeteoClient {
-  /// Default host + path for the ensemble API. Distinct from the deterministic
-  /// forecast host; the deterministic host does not serve ensemble members.
-  static let defaultEnsembleBaseURL = "https://ensemble-api.open-meteo.com/v1/ensemble"
-
   /// Fetches an ensemble forecast for a SINGLE variable from a SINGLE model.
   ///
   /// - Parameters:
@@ -206,14 +202,12 @@ public extension OpenMeteoClient {
   ///   - model: The ensemble system (default GEFS 0.25°).
   ///   - variable: The single surface variable to request.
   ///   - forecastDays: Number of forecast days.
-  ///   - ensembleBaseURL: Override the ensemble endpoint (default the public host).
   func fetchEnsemble(
     latitude: Double,
     longitude: Double,
     model: EnsembleModel = .gfs025,
     variable: EnsembleVariable = .temperature2m,
-    forecastDays: Int = 7,
-    ensembleBaseURL: String = OpenMeteoClient.defaultEnsembleBaseURL
+    forecastDays: Int = 7
   ) async throws -> EnsembleResponse {
     var components = URLComponents(string: ensembleBaseURL)!
     var queryItems = [
@@ -229,9 +223,9 @@ public extension OpenMeteoClient {
     }
     components.queryItems = queryItems
 
-    let url = applyingAPIKeyPublic(to: components.url!)
+    let url = components.url!
 
-    let (data, response) = try await URLSession.shared.data(from: url)
+    let (data, response) = try await data(from: url)
     guard let httpResponse = response as? HTTPURLResponse,
           200...299 ~= httpResponse.statusCode else {
       throw OpenMeteoError.invalidResponse
