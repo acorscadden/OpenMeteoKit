@@ -67,6 +67,7 @@ extension OpenMeteoClient {
   private static func transform(_ raw: RawAirQualityResponse) -> AirQualityForecast {
     // `timezone=auto` → local time strings; parse in the location's zone.
     let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
     formatter.timeZone = TimeZone(secondsFromGMT: raw.utcOffsetSeconds) ?? TimeZone(abbreviation: "GMT")
 

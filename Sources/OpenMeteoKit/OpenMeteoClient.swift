@@ -201,6 +201,7 @@ public struct OpenMeteoClient {
   private static func transformFreezingLevelResponse(from raw: RawFreezingLevelResponse) -> FreezingLevelResponse {
     let locationTimezone = TimeZone(identifier: raw.timezone) ?? TimeZone(secondsFromGMT: 0)!
     let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
     formatter.timeZone = locationTimezone
 
@@ -539,6 +540,7 @@ public struct OpenMeteoWeatherResponse: Decodable {
     // the location's timezone (via the response's utc offset). Parsing as GMT
     // would shift every timestamp by the offset and push "today" into yesterday.
     let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
     formatter.timeZone = TimeZone(secondsFromGMT: utcOffsetSeconds) ?? TimeZone(abbreviation: "GMT")
 
@@ -612,10 +614,12 @@ public struct OpenMeteoWeatherResponse: Decodable {
     // so day boundaries (and sunrise/sunset) land on the correct calendar day.
     let zone = TimeZone(secondsFromGMT: utcOffsetSeconds) ?? TimeZone(abbreviation: "GMT")
     let dateFormatter = DateFormatter()
+    dateFormatter.locale = Locale(identifier: "en_US_POSIX")
     dateFormatter.dateFormat = "yyyy-MM-dd"
     dateFormatter.timeZone = zone
 
     let dateTimeFormatter = DateFormatter()
+    dateTimeFormatter.locale = Locale(identifier: "en_US_POSIX")
     dateTimeFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
     dateTimeFormatter.timeZone = zone
 
