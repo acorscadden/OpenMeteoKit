@@ -18,7 +18,19 @@ import Foundation
   #expect(WeatherModel.gemRegional.rawValue == "gem_regional")
   #expect(WeatherModel.gemHrdpsContinental.rawValue == "gem_hrdps_continental")
   #expect(WeatherModel.gemHrdpsWest.rawValue == "gem_hrdps_west")
-  #expect(WeatherModel.allCases.count == 10)
+  #expect(WeatherModel.iconEu.rawValue == "icon_eu")
+  #expect(WeatherModel.iconD2.rawValue == "icon_d2")
+  #expect(WeatherModel.nam.rawValue == "ncep_nam_conus")
+  #expect(WeatherModel.ukv.rawValue == "ukmo_uk_deterministic_2km")
+  #expect(WeatherModel.iconCh1.rawValue == "meteoswiss_icon_ch1")
+  #expect(WeatherModel.iconCh2.rawValue == "meteoswiss_icon_ch2")
+  #expect(WeatherModel.metNordic.rawValue == "metno_seamless")
+  #expect(WeatherModel.dmiHarmonie.rawValue == "dmi_harmonie_arome_europe")
+  #expect(WeatherModel.icon2i.rawValue == "italia_meteo_arpae_icon_2i")
+  #expect(WeatherModel.knmiHarmonie.rawValue == "knmi_harmonie_arome_netherlands")
+  #expect(WeatherModel.aromeFrance.rawValue == "meteofrance_arome_france")
+  #expect(WeatherModel.arpegeEurope.rawValue == "meteofrance_arpege_europe")
+  #expect(WeatherModel.allCases.count == 22)
 }
 
 @Test func testAvailableModelsNewYork() {
@@ -30,7 +42,10 @@ import Foundation
   #expect(nyModels.contains(.hrrr), "HRRR should be available in CONUS")
   #expect(nyModels.contains(.nbm), "NBM should be available in CONUS")
   #expect(nyModels.contains(.gemRegional), "GEM Regional should cover North America")
-  #expect(nyModels.count == 9, "All 9 models should be available in NYC")
+  #expect(nyModels.contains(.nam), "NAM should be available in CONUS")
+  #expect(!nyModels.contains(.iconD2), "ICON-D2 is central Europe only")
+  #expect(!nyModels.contains(.ukv), "UKV is the British Isles only")
+  #expect(nyModels.count == 10, "5 globals + HRRR, NBM, NAM, GEM-Reg, GEM-HRDPS")
 }
 
 @Test func testAvailableModelsVancouver() {
@@ -44,26 +59,58 @@ import Foundation
 }
 
 @Test func testAvailableModelsLondon() {
-  // London, UK - should only have global models
+  // London, UK - globals plus the European/British high-res nests
   let londonModels = WeatherModel.availableModels(latitude: 51.5074, longitude: -0.1278)
 
   #expect(londonModels.contains(.ecmwfIfs025), "ECMWF should be available globally")
   #expect(londonModels.contains(.iconSeamless), "ICON should be available globally")
   #expect(londonModels.contains(.gfsSeamless), "GFS should be available globally")
+  #expect(londonModels.contains(.ukv), "UKV should cover London")
+  #expect(londonModels.contains(.iconD2), "ICON-D2 reaches southern England")
+  #expect(londonModels.contains(.iconEu), "ICON-EU covers all of Europe")
+  #expect(londonModels.contains(.dmiHarmonie), "DMI HARMONIE covers northern Europe")
+  #expect(londonModels.contains(.arpegeEurope), "ARPEGE covers all of Europe")
   #expect(!londonModels.contains(.hrrr), "HRRR should NOT cover London")
   #expect(!londonModels.contains(.nbm), "NBM should NOT cover London")
   #expect(!londonModels.contains(.gemHrdpsContinental), "HRDPS should NOT cover London")
-  #expect(londonModels.count == 5, "Only 5 global models should be available in London")
+  #expect(!londonModels.contains(.knmiHarmonie), "KNMI starts at the prime meridian")
+  #expect(!londonModels.contains(.icon2i), "ICON-2I is Italy, too far south")
+  #expect(!londonModels.contains(.metNordic), "MET Nordic starts at 52.3°N")
+  #expect(londonModels.count == 11, "5 globals + UKV, ICON-D2, ICON-EU, DMI, AROME, ARPEGE")
 }
 
 @Test func testAvailableModelsTokyo() {
-  // Tokyo, Japan - should only have global models
+  // Tokyo, Japan - global models only
   let tokyoModels = WeatherModel.availableModels(latitude: 35.6762, longitude: 139.6503)
 
   #expect(tokyoModels.contains(.ecmwfIfs025), "ECMWF should be available globally")
   #expect(!tokyoModels.contains(.hrrr), "HRRR should NOT cover Tokyo")
   #expect(!tokyoModels.contains(.gemRegional), "GEM Regional should NOT cover Tokyo")
-  #expect(tokyoModels.count == 5, "Only 5 global models should be available in Tokyo")
+  #expect(!tokyoModels.contains(.iconD2), "ICON-D2 should NOT cover Tokyo")
+  #expect(tokyoModels.count == 5, "Only the 5 global models are available in Tokyo")
+}
+
+@Test func testTailChainsTerminate() {
+  // Every model must resolve to a finite tail chain — no cycles, and every
+  // short-range model must eventually reach a standalone model.
+  let probes = [(48.13, 11.58), (51.51, -0.13), (47.37, 8.54), (59.91, 10.75),
+                (39.74, -104.99), (49.28, -123.12), (35.68, 139.69), (-33.87, 151.21)]
+  for model in WeatherModel.allCases {
+    for (lat, lon) in probes {
+      var chain: [WeatherModel] = [model]
+      var current = model
+      while !current.standaloneTenDayCapable {
+        guard let next = current.tailModel(latitude: lat, longitude: lon) else { break }
+        #expect(!chain.contains(next), "\(model) tail chain cycles at \(next)")
+        if chain.contains(next) { break }
+        chain.append(next)
+        current = next
+      }
+      #expect(chain.count <= 5, "\(model) chain too long at \(lat),\(lon): \(chain)")
+      #expect(current.standaloneTenDayCapable,
+              "\(model) chain at \(lat),\(lon) ends on non-standalone \(current)")
+    }
+  }
 }
 
 @Test func testIsAvailableMethod() {

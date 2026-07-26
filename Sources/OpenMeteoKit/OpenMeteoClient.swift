@@ -223,19 +223,51 @@ public enum WeatherModel: String, CaseIterable, Sendable {
   case ecmwfIfs025 = "ecmwf_ifs025"
   case ecmwfAifs025 = "ecmwf_aifs025"
 
-  // German models
+  // German models (DWD ICON family, finest nest first at request time)
   case iconSeamless = "icon_seamless"
+  case iconEu = "icon_eu"
+  case iconD2 = "icon_d2"
+
+  // French models
+  case aromeFrance = "meteofrance_arome_france"
+  case arpegeEurope = "meteofrance_arpege_europe"
 
   // American models
   case gfsSeamless = "gfs_seamless"
   case hrrr = "ncep_hrrr_conus"
   case nbm = "ncep_nbm_conus"
+  case nam = "ncep_nam_conus"
 
   // Canadian models
   case gemGlobal = "gem_global"
   case gemRegional = "gem_regional"
   case gemHrdpsContinental = "gem_hrdps_continental"
   case gemHrdpsWest = "gem_hrdps_west"   // 1 km, West Canada (experimental)
+
+  // British models
+  case ukv = "ukmo_uk_deterministic_2km"
+
+  // Swiss models (MeteoSwiss ICON-CH)
+  case iconCh1 = "meteoswiss_icon_ch1"
+  case iconCh2 = "meteoswiss_icon_ch2"
+
+  // Nordic models
+  case metNordic = "metno_seamless"
+  case dmiHarmonie = "dmi_harmonie_arome_europe"
+
+  // Italian models
+  case icon2i = "italia_meteo_arpae_icon_2i"
+
+  // Dutch models
+  case knmiHarmonie = "knmi_harmonie_arome_netherlands"
+
+  // Deliberately NOT exposed, verified against the live API on 2026-07-26:
+  //   ncep_aigfs025  - publishes no apparent temperature, dew point, humidity,
+  //                    precipitation probability or gusts, and is full-horizon,
+  //                    so there is no tail to borrow them from.
+  //   jma_seamless   - answers worldwide but publishes no precipitation
+  //                    probability or gusts, again with no tail to borrow from.
+  //   bom_access_global, kma_seamless, gfs_graphcast025 - every variable null.
 
   // Ensemble models (requires different API endpoint - not yet supported)
   // case gfsEnsemble = "gfs_ensemble_seamless"
@@ -282,6 +314,72 @@ public enum WeatherModel: String, CaseIterable, Sendable {
     case .gemHrdpsWest:
       return latitude >= 46.0 && latitude <= 62.0 &&
              longitude >= -142.0 && longitude <= -110.0
+
+    // NAM Conus - shares HRRR's Lambert-conformal CONUS grid, so it gets the
+    // same (deliberately generous) envelope. Off-grid corners return no data and
+    // fall back to Apple, matching the existing HRRR behaviour.
+    case .nam:
+      return latitude >= 21.0 && latitude <= 48.0 &&
+             longitude >= -135.0 && longitude <= -60.0
+
+    // Domain boxes below come from each domain's published grid metadata,
+    // https://api.open-meteo.com/data/<domain>/static/meta.json (crs_wkt BBOX).
+
+    // ICON-EU - DWD's 7 km European nest.
+    case .iconEu:
+      return latitude >= 29.5 && latitude <= 70.5 &&
+             longitude >= -23.5 && longitude <= 62.5
+
+    // ICON-D2 - DWD's 2.2 km central-European nest (Germany, Alps, Benelux,
+    // northern France, southern UK).
+    case .iconD2:
+      return latitude >= 43.18 && latitude <= 58.08 &&
+             longitude >= -3.94 && longitude <= 20.34
+
+    // UKV - Met Office 2 km. The published BBOX is the envelope of a Lambert
+    // Azimuthal grid, so it overstates the east edge (Munich is inside the box
+    // but off the grid). Narrowed to the verified extent: UK, Ireland, northern
+    // France, Benelux, western Norway.
+    case .ukv:
+      return latitude >= 46.0 && latitude <= 62.0 &&
+             longitude >= -14.0 && longitude <= 8.0
+
+    // MeteoSwiss ICON-CH1 / ICON-CH2 - Alpine domain, same grid.
+    case .iconCh1, .iconCh2:
+      return latitude >= 42.58 && latitude <= 49.79 &&
+             longitude >= 1.23 && longitude <= 16.85
+
+    // MET Norway - gated to the 1 km MET Nordic nest. The seamless endpoint
+    // answers worldwide, but outside this box it is just ECMWF IFS, which the
+    // app already offers directly.
+    case .metNordic:
+      return latitude >= 52.3 && latitude <= 72.19 &&
+             longitude >= 1.92 && longitude <= 41.76
+
+    // DMI HARMONIE AROME - Danish 2 km northern-European domain.
+    case .dmiHarmonie:
+      return latitude >= 39.67 && latitude <= 62.67 &&
+             longitude >= -25.42 && longitude <= 40.07
+
+    // ICON-2I - Italia Meteo / ARPAE 2.2 km domain.
+    case .icon2i:
+      return latitude >= 33.7 && latitude <= 48.9 &&
+             longitude >= 3.0 && longitude <= 22.0
+
+    // KNMI HARMONIE AROME - Dutch 2 km domain.
+    case .knmiHarmonie:
+      return latitude >= 49.0 && latitude <= 56.0 &&
+             longitude >= 0.0 && longitude <= 11.28
+
+    // Meteo-France AROME - 2.5 km nest over France and its near neighbours.
+    case .aromeFrance:
+      return latitude >= 37.5 && latitude <= 55.4 &&
+             longitude >= -12.0 && longitude <= 16.0
+
+    // Meteo-France ARPEGE - 11 km European domain.
+    case .arpegeEurope:
+      return latitude >= 20.0 && latitude <= 72.0 &&
+             longitude >= -32.0 && longitude <= 42.0
     }
   }
 
@@ -302,33 +400,55 @@ public enum WeatherModel: String, CaseIterable, Sendable {
     case .ecmwfIfs025: return 15
     case .ecmwfAifs025: return 15
     case .iconSeamless: return 7
+    case .iconEu: return 5
+    case .iconD2: return 2
     case .gfsSeamless: return 16
     case .hrrr: return 2
     case .nbm: return 11
+    case .nam: return 2
     case .gemGlobal: return 10
     case .gemRegional: return 3
     case .gemHrdpsContinental: return 2
     case .gemHrdpsWest: return 2
+    case .ukv: return 2
+    case .iconCh1: return 2
+    case .iconCh2: return 5
+    case .metNordic: return 15
+    case .dmiHarmonie: return 2
+    case .icon2i: return 3
+    case .knmiHarmonie: return 3
+    case .aromeFrance: return 2
+    case .arpegeEurope: return 4
     }
   }
 
   /// Whether this model can stand alone for a 10-day forecast.
   /// Short-range / high-resolution models cannot and must be stitched onto a longer-range tail.
+  ///
+  /// Exhaustive on purpose: a new short-range model that fell through a `default`
+  /// would silently claim a full horizon and truncate the 10-day view.
   public var standaloneTenDayCapable: Bool {
     switch self {
-    case .hrrr, .gemHrdpsContinental, .gemHrdpsWest, .gemRegional:
+    case .hrrr, .gemHrdpsContinental, .gemHrdpsWest, .gemRegional,
+         .iconEu, .iconD2, .nam, .ukv, .iconCh1, .iconCh2,
+         .dmiHarmonie, .icon2i, .knmiHarmonie, .aromeFrance, .arpegeEurope:
       return false
-    default:
+    case .ecmwfIfs025, .ecmwfAifs025, .iconSeamless, .gfsSeamless, .nbm,
+         .gemGlobal, .metNordic:
       return true
     }
   }
 
   /// Whether this is a short-range / high-resolution model.
+  ///
+  /// Exhaustive on purpose — see `standaloneTenDayCapable`.
   public var isHighResolution: Bool {
     switch self {
-    case .hrrr, .gemHrdpsContinental, .gemHrdpsWest, .gemRegional, .nbm:
+    case .hrrr, .gemHrdpsContinental, .gemHrdpsWest, .gemRegional, .nbm,
+         .nam, .iconEu, .iconD2, .ukv, .iconCh1, .iconCh2,
+         .metNordic, .dmiHarmonie, .icon2i, .knmiHarmonie, .aromeFrance, .arpegeEurope:
       return true
-    default:
+    case .ecmwfIfs025, .ecmwfAifs025, .iconSeamless, .gfsSeamless, .gemGlobal:
       return false
     }
   }
@@ -346,11 +466,26 @@ public enum WeatherModel: String, CaseIterable, Sendable {
         : .gemGlobal
     case .gemRegional:
       return .gemGlobal
-    case .hrrr:
+    case .hrrr, .nam:
       return WeatherModel.nbm.isAvailable(latitude: latitude, longitude: longitude)
         ? .nbm
         : .gfsSeamless
-    default:
+
+    // European nests step down through ICON-EU (7 km) so the resolution drop is
+    // gradual, then ECMWF completes the 10-day view.
+    case .iconD2, .ukv, .iconCh2, .dmiHarmonie, .icon2i, .knmiHarmonie, .arpegeEurope:
+      return WeatherModel.iconEu.isAvailable(latitude: latitude, longitude: longitude)
+        ? .iconEu
+        : .ecmwfIfs025
+    case .iconCh1:
+      return .iconCh2
+    case .aromeFrance:
+      return .arpegeEurope
+    case .iconEu:
+      return .ecmwfIfs025
+
+    case .ecmwfIfs025, .ecmwfAifs025, .iconSeamless, .gfsSeamless, .nbm,
+         .gemGlobal, .metNordic:
       return nil
     }
   }
