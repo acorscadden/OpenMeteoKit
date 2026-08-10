@@ -457,7 +457,10 @@ public enum WeatherModel: String, CaseIterable, Sendable {
 
   /// Whether this model publishes `precipitation_probability`. Most deterministic
   /// models don't — consumers stitch it in from another model in the same request.
-  /// Verified per model against the live API on 2026-08-10.
+  /// Verified per model on 2026-08-10 against the CUSTOMER API host (which the
+  /// app's proxy fronts). The free api.open-meteo.com host answers differently
+  /// for some models — e.g. it fabricates probability for ICON-EU/ICON-D2 that
+  /// the customer host does not — so do not "correct" this table against it.
   ///
   /// Exhaustive on purpose — see `standaloneTenDayCapable`.
   public var providesPrecipitationProbability: Bool {
