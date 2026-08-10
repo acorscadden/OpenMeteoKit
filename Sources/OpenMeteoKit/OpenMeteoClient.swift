@@ -221,7 +221,9 @@ public struct OpenMeteoClient {
 public enum WeatherModel: String, CaseIterable, Sendable {
   // European models
   case ecmwfIfs025 = "ecmwf_ifs025"
-  case ecmwfAifs025 = "ecmwf_aifs025"
+  // The bare `ecmwf_aifs025` id answers but returns every variable null; only
+  // the `_single` member id yields data (verified live 2026-08-10).
+  case ecmwfAifs025Single = "ecmwf_aifs025_single"
 
   // German models (DWD ICON family, finest nest first at request time)
   case iconSeamless = "icon_seamless"
@@ -281,7 +283,7 @@ public enum WeatherModel: String, CaseIterable, Sendable {
   public func isAvailable(latitude: Double, longitude: Double) -> Bool {
     switch self {
     // Global models - available everywhere
-    case .ecmwfIfs025, .ecmwfAifs025, .iconSeamless, .gfsSeamless, .gemGlobal:
+    case .ecmwfIfs025, .ecmwfAifs025Single, .iconSeamless, .gfsSeamless, .gemGlobal:
       return true
 
     // HRRR - CONUS domain
@@ -398,7 +400,7 @@ public enum WeatherModel: String, CaseIterable, Sendable {
   public var maxForecastDays: Int {
     switch self {
     case .ecmwfIfs025: return 15
-    case .ecmwfAifs025: return 15
+    case .ecmwfAifs025Single: return 15
     case .iconSeamless: return 7
     case .iconEu: return 5
     case .iconD2: return 2
@@ -433,7 +435,7 @@ public enum WeatherModel: String, CaseIterable, Sendable {
          .iconEu, .iconD2, .nam, .ukv, .iconCh1, .iconCh2,
          .dmiHarmonie, .icon2i, .knmiHarmonie, .aromeFrance, .arpegeEurope:
       return false
-    case .ecmwfIfs025, .ecmwfAifs025, .iconSeamless, .gfsSeamless, .nbm,
+    case .ecmwfIfs025, .ecmwfAifs025Single, .iconSeamless, .gfsSeamless, .nbm,
          .gemGlobal, .metNordic:
       return true
     }
@@ -448,9 +450,32 @@ public enum WeatherModel: String, CaseIterable, Sendable {
          .nam, .iconEu, .iconD2, .ukv, .iconCh1, .iconCh2,
          .metNordic, .dmiHarmonie, .icon2i, .knmiHarmonie, .aromeFrance, .arpegeEurope:
       return true
-    case .ecmwfIfs025, .ecmwfAifs025, .iconSeamless, .gfsSeamless, .gemGlobal:
+    case .ecmwfIfs025, .ecmwfAifs025Single, .iconSeamless, .gfsSeamless, .gemGlobal:
       return false
     }
+  }
+
+  /// Whether this model publishes `precipitation_probability`. Most deterministic
+  /// models don't — consumers stitch it in from another model in the same request.
+  /// Verified per model against the live API on 2026-08-10.
+  ///
+  /// Exhaustive on purpose — see `standaloneTenDayCapable`.
+  public var providesPrecipitationProbability: Bool {
+    switch self {
+    case .ecmwfIfs025, .iconSeamless, .gfsSeamless, .hrrr, .nbm,
+         .gemGlobal, .iconCh1, .iconCh2, .metNordic:
+      return true
+    case .ecmwfAifs025Single, .iconEu, .iconD2, .aromeFrance, .arpegeEurope,
+         .nam, .gemRegional, .gemHrdpsContinental, .gemHrdpsWest, .ukv,
+         .dmiHarmonie, .icon2i, .knmiHarmonie:
+      return false
+    }
+  }
+
+  /// Whether this model publishes `wind_gusts_10m`. Only ECMWF's AI model omits
+  /// gusts (verified live 2026-08-10).
+  public var providesWindGusts: Bool {
+    self != .ecmwfAifs025Single
   }
 
   /// For a short-horizon model, returns the longer-range model to stitch onto, picked from coverage.
@@ -484,7 +509,7 @@ public enum WeatherModel: String, CaseIterable, Sendable {
     case .iconEu:
       return .ecmwfIfs025
 
-    case .ecmwfIfs025, .ecmwfAifs025, .iconSeamless, .gfsSeamless, .nbm,
+    case .ecmwfIfs025, .ecmwfAifs025Single, .iconSeamless, .gfsSeamless, .nbm,
          .gemGlobal, .metNordic:
       return nil
     }

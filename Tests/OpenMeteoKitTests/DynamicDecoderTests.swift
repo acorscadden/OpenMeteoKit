@@ -163,7 +163,7 @@ private func loadSample() throws -> OpenMeteoWeatherResponse {
 
 @Test func testMaxForecastDays() {
   #expect(WeatherModel.ecmwfIfs025.maxForecastDays == 15)
-  #expect(WeatherModel.ecmwfAifs025.maxForecastDays == 15)
+  #expect(WeatherModel.ecmwfAifs025Single.maxForecastDays == 15)
   #expect(WeatherModel.iconSeamless.maxForecastDays == 7)
   #expect(WeatherModel.gfsSeamless.maxForecastDays == 16)
   #expect(WeatherModel.hrrr.maxForecastDays == 2)

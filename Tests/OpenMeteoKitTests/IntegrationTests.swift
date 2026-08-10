@@ -306,12 +306,12 @@ import Foundation
   let response = try await client.fetchWeatherData(
     latitude: 52.52,
     longitude: 13.405,
-    models: [.ecmwfAifs025, .ecmwfIfs025]
+    models: [.ecmwfAifs025Single, .ecmwfIfs025]
   )
 
   #expect(!response.hourly.isEmpty, "Hourly data should not be empty")
   let firstHour = response.hourly.first!
-  let data = firstHour[.ecmwfAifs025]
+  let data = firstHour[.ecmwfAifs025Single]
   #expect(data != nil, "ECMWF AIFS model data should be present")
   // Note: AIFS is an AI model and may have null values for some hours
   print("✅ ECMWF AIFS model verified")
@@ -425,7 +425,7 @@ import Foundation
     longitude: -74.0060,
     models: [
       .ecmwfIfs025,
-      .ecmwfAifs025,
+      .ecmwfAifs025Single,
       .iconSeamless,
       .gfsSeamless,
       .hrrr,
@@ -441,7 +441,7 @@ import Foundation
 
   // Verify each model has data
   #expect(firstHour[.ecmwfIfs025] != nil, "ECMWF IFS should be present")
-  #expect(firstHour[.ecmwfAifs025] != nil, "ECMWF AIFS should be present")
+  #expect(firstHour[.ecmwfAifs025Single] != nil, "ECMWF AIFS should be present")
   #expect(firstHour[.iconSeamless] != nil, "ICON should be present")
   #expect(firstHour[.gfsSeamless] != nil, "GFS should be present")
   #expect(firstHour[.hrrr] != nil, "HRRR should be present")

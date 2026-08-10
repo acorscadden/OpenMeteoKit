@@ -9,7 +9,7 @@ import Foundation
 
 @Test func testWeatherModelEnumValues() {
   #expect(WeatherModel.ecmwfIfs025.rawValue == "ecmwf_ifs025")
-  #expect(WeatherModel.ecmwfAifs025.rawValue == "ecmwf_aifs025")
+  #expect(WeatherModel.ecmwfAifs025Single.rawValue == "ecmwf_aifs025_single")
   #expect(WeatherModel.iconSeamless.rawValue == "icon_seamless")
   #expect(WeatherModel.gfsSeamless.rawValue == "gfs_seamless")
   #expect(WeatherModel.hrrr.rawValue == "ncep_hrrr_conus")
@@ -708,9 +708,9 @@ import Foundation
       "wind_speed_10m_ecmwf_ifs025": "kn",
       "wind_direction_10m_ecmwf_ifs025": "°",
       "wind_gusts_10m_ecmwf_ifs025": "kn",
-      "wind_speed_10m_ecmwf_aifs025": "kn",
-      "wind_direction_10m_ecmwf_aifs025": "°",
-      "wind_gusts_10m_ecmwf_aifs025": "kn",
+      "wind_speed_10m_ecmwf_aifs025_single": "kn",
+      "wind_direction_10m_ecmwf_aifs025_single": "°",
+      "wind_gusts_10m_ecmwf_aifs025_single": "kn",
       "wind_speed_10m_icon_seamless": "kn",
       "wind_direction_10m_icon_seamless": "°",
       "wind_gusts_10m_icon_seamless": "kn",
@@ -733,7 +733,7 @@ import Foundation
       "wind_direction_10m_gem_hrdps_continental": "°",
       "wind_gusts_10m_gem_hrdps_continental": "kn",
       "temperature_2m_ecmwf_ifs025": "°C",
-      "temperature_2m_ecmwf_aifs025": "°C",
+      "temperature_2m_ecmwf_aifs025_single": "°C",
       "temperature_2m_icon_seamless": "°C",
       "temperature_2m_gfs_seamless": "°C",
       "temperature_2m_ncep_hrrr_conus": "°C",
@@ -749,9 +749,9 @@ import Foundation
       "wind_speed_10m_ecmwf_ifs025": [5.0],
       "wind_direction_10m_ecmwf_ifs025": [180],
       "wind_gusts_10m_ecmwf_ifs025": [10.0],
-      "wind_speed_10m_ecmwf_aifs025": [5.1],
-      "wind_direction_10m_ecmwf_aifs025": [181],
-      "wind_gusts_10m_ecmwf_aifs025": [10.1],
+      "wind_speed_10m_ecmwf_aifs025_single": [5.1],
+      "wind_direction_10m_ecmwf_aifs025_single": [181],
+      "wind_gusts_10m_ecmwf_aifs025_single": [10.1],
       "wind_speed_10m_icon_seamless": [5.2],
       "wind_direction_10m_icon_seamless": [182],
       "wind_gusts_10m_icon_seamless": [10.2],
@@ -774,7 +774,7 @@ import Foundation
       "wind_direction_10m_gem_hrdps_continental": [188],
       "wind_gusts_10m_gem_hrdps_continental": [10.8],
       "temperature_2m_ecmwf_ifs025": [20.0],
-      "temperature_2m_ecmwf_aifs025": [20.1],
+      "temperature_2m_ecmwf_aifs025_single": [20.1],
       "temperature_2m_icon_seamless": [20.2],
       "temperature_2m_gfs_seamless": [20.3],
       "temperature_2m_ncep_hrrr_conus": [20.4],
@@ -794,7 +794,7 @@ import Foundation
 
   // Test temperature for all models
   #expect(hourly[.ecmwfIfs025]?.temperature == 20.0)
-  #expect(hourly[.ecmwfAifs025]?.temperature == 20.1)
+  #expect(hourly[.ecmwfAifs025Single]?.temperature == 20.1)
   #expect(hourly[.iconSeamless]?.temperature == 20.2)
   #expect(hourly[.gfsSeamless]?.temperature == 20.3)
   #expect(hourly[.hrrr]?.temperature == 20.4)
