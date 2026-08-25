@@ -2,10 +2,9 @@
 //  AirQuality.swift
 //  OpenMeteoKit
 //
-//  Open-Meteo's UV index AND air-quality (US AQI, PM2.5) live on the separate
+//  Open-Meteo's UV index and air-quality data live on the separate
 //  Air-Quality API (air-quality-api.open-meteo.com), not the forecast endpoint,
-//  and are location-based (model-independent). One request serves both the app's
-//  UV overlay and its air-quality feature (PM2.5 is the wildfire-smoke signal).
+//  and are location-based (model-independent).
 //
 
 import Foundation
@@ -27,9 +26,52 @@ public struct AirQualityForecast: Sendable {
   public let hourly: [Hour]
 }
 
+enum EuropeanAQIScale {
+  private static let pm2_5Thresholds = [0.0, 5.0, 15.0, 50.0, 90.0, 140.0]
+  private static let pm10Thresholds = [0.0, 15.0, 45.0, 120.0, 195.0, 270.0]
+  private static let nitrogenDioxideThresholds = [0.0, 10.0, 25.0, 60.0, 100.0, 150.0]
+  private static let ozoneThresholds = [0.0, 60.0, 100.0, 120.0, 160.0, 180.0]
+  private static let sulphurDioxideThresholds = [0.0, 20.0, 40.0, 125.0, 190.0, 275.0]
+
+  static func index(
+    pm2_5: Double?,
+    pm10: Double?,
+    nitrogenDioxide: Double?,
+    ozone: Double?,
+    sulphurDioxide: Double?
+  ) -> Int? {
+    let indices = [
+      subindex(for: pm2_5, thresholds: pm2_5Thresholds),
+      subindex(for: pm10, thresholds: pm10Thresholds),
+      subindex(for: nitrogenDioxide, thresholds: nitrogenDioxideThresholds),
+      subindex(for: ozone, thresholds: ozoneThresholds),
+      subindex(for: sulphurDioxide, thresholds: sulphurDioxideThresholds)
+    ].compactMap { $0 }
+
+    guard let worst = indices.max() else { return nil }
+    return Int(worst.rounded())
+  }
+
+  private static func subindex(for concentration: Double?, thresholds: [Double]) -> Double? {
+    guard let concentration, concentration.isFinite, concentration >= 0 else { return nil }
+
+    for upperIndex in thresholds.indices.dropFirst() where concentration < thresholds[upperIndex] {
+      let lowerIndex = upperIndex - 1
+      let lower = thresholds[lowerIndex]
+      let upper = thresholds[upperIndex]
+      return Double(lowerIndex * 20) + (concentration - lower) / (upper - lower) * 20
+    }
+
+    let lowerIndex = thresholds.count - 2
+    let lower = thresholds[lowerIndex]
+    let upper = thresholds[lowerIndex + 1]
+    return Double(lowerIndex * 20) + (concentration - lower) / (upper - lower) * 20
+  }
+}
+
 extension OpenMeteoClient {
 
-  /// Fetch hourly UV index, US AQI, and PM2.5 for a location. These are
+  /// Fetch hourly UV index and pollutant concentrations for a location. These are
   /// model-independent (sun + atmosphere), so this is a single light request
   /// regardless of the selected forecast model. Horizon is capped at the AQ
   /// API's ~7 days.
@@ -44,9 +86,12 @@ extension OpenMeteoClient {
     components.queryItems = [
       URLQueryItem(name: "latitude", value: String(latitude)),
       URLQueryItem(name: "longitude", value: String(longitude)),
-      // us_aqi + european_aqi are returned directly; canadian AQHI is computed
-      // from ozone/nitrogen_dioxide/pm2_5 (Open-Meteo has no AQHI field).
-      URLQueryItem(name: "hourly", value: "uv_index,us_aqi,european_aqi,pm2_5,ozone,nitrogen_dioxide"),
+      // US AQI is returned directly. European AQI and Canadian AQHI are
+      // computed from concentrations so every index uses the same model data.
+      URLQueryItem(
+        name: "hourly",
+        value: "uv_index,us_aqi,pm2_5,pm10,ozone,nitrogen_dioxide,sulphur_dioxide"
+      ),
       URLQueryItem(name: "forecast_days", value: String(min(forecastDays, 7))),
       URLQueryItem(name: "timezone", value: "auto")
     ]
@@ -79,16 +124,24 @@ extension OpenMeteoClient {
     var hours: [AirQualityForecast.Hour] = []
     for (index, timeString) in raw.hourly.time.enumerated() {
       guard let date = formatter.date(from: timeString) else { continue }
-      let pm = at(raw.hourly.pm2_5, index)
+      let pm2_5 = at(raw.hourly.pm2_5, index)
+      let pm10 = at(raw.hourly.pm10, index)
+      let ozone = at(raw.hourly.ozone, index)
+      let nitrogenDioxide = at(raw.hourly.no2, index)
+      let sulphurDioxide = at(raw.hourly.so2, index)
       hours.append(.init(
         date: date,
         uvIndex: at(raw.hourly.uvIndex, index),
         usAQI: at(raw.hourly.usAQI, index).map(Int.init),
-        europeanAQI: at(raw.hourly.europeanAQI, index).map(Int.init),
-        canadianAQHI: aqhi(ozone: at(raw.hourly.ozone, index),
-                           no2: at(raw.hourly.no2, index),
-                           pm2_5: pm),
-        pm2_5: pm
+        europeanAQI: EuropeanAQIScale.index(
+          pm2_5: pm2_5,
+          pm10: pm10,
+          nitrogenDioxide: nitrogenDioxide,
+          ozone: ozone,
+          sulphurDioxide: sulphurDioxide
+        ),
+        canadianAQHI: aqhi(ozone: ozone, no2: nitrogenDioxide, pm2_5: pm2_5),
+        pm2_5: pm2_5
       ))
     }
     return AirQualityForecast(utcOffsetSeconds: raw.utcOffsetSeconds, timezone: raw.timezone, hourly: hours)
@@ -117,18 +170,20 @@ private struct RawAirQualityResponse: Decodable {
     let time: [String]
     let uvIndex: [Double?]?
     let usAQI: [Double?]?
-    let europeanAQI: [Double?]?
     let pm2_5: [Double?]?
+    let pm10: [Double?]?
     let ozone: [Double?]?
     let no2: [Double?]?
+    let so2: [Double?]?
     enum CodingKeys: String, CodingKey {
       case time
       case uvIndex = "uv_index"
       case usAQI = "us_aqi"
-      case europeanAQI = "european_aqi"
       case pm2_5 = "pm2_5"
+      case pm10
       case ozone
       case no2 = "nitrogen_dioxide"
+      case so2 = "sulphur_dioxide"
     }
   }
 

@@ -7,6 +7,40 @@ import Foundation
   #expect(client != nil)
 }
 
+@Test func testEuropeanAQIPentictonRegression() {
+  let index = EuropeanAQIScale.index(
+    pm2_5: 31.9,
+    pm10: 32.7,
+    nitrogenDioxide: 1.1,
+    ozone: 106,
+    sulphurDioxide: 1.4
+  )
+
+  #expect(index == 50)
+}
+
+@Test func testEuropeanAQIUsesWorstPollutant() {
+  let index = EuropeanAQIScale.index(
+    pm2_5: 2.5,
+    pm10: 7.5,
+    nitrogenDioxide: 5,
+    ozone: 190,
+    sulphurDioxide: 10
+  )
+
+  #expect(index == 110)
+}
+
+@Test func testEuropeanAQIRequiresAValidPollutant() {
+  #expect(EuropeanAQIScale.index(
+    pm2_5: nil,
+    pm10: .nan,
+    nitrogenDioxide: -1,
+    ozone: nil,
+    sulphurDioxide: nil
+  ) == nil)
+}
+
 @Test func testWeatherModelEnumValues() {
   #expect(WeatherModel.ecmwfIfs025.rawValue == "ecmwf_ifs025")
   #expect(WeatherModel.ecmwfAifs025Single.rawValue == "ecmwf_aifs025_single")
