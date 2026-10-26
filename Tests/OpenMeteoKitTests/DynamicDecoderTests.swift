@@ -159,6 +159,29 @@ private func loadSample() throws -> OpenMeteoWeatherResponse {
   #expect(response.hourly[1][.gemGlobal]?.temperature == nil)
 }
 
+@Test func testDailyDatesPastADSTChangeAreLocalMidnights() throws {
+  let json = """
+  {
+    "latitude": 45.5, "longitude": -73.57,
+    "generationtime_ms": 0.1, "utc_offset_seconds": -14400,
+    "timezone": "America/Toronto", "timezone_abbreviation": "GMT-4", "elevation": 30.0,
+    "daily_units": { "time": "iso8601", "temperature_2m_max_gfs_seamless": "°C" },
+    "daily": {
+      "time": ["2026-10-31", "2026-11-01", "2026-11-02"],
+      "temperature_2m_max_gfs_seamless": [8.0, 9.0, 10.0]
+    },
+    "hourly_units": { "time": "iso8601" },
+    "hourly": { "time": [] }
+  }
+  """
+  let response = try JSONDecoder().decode(OpenMeteoWeatherResponse.self, from: Data(json.utf8))
+  var calendar = Calendar(identifier: .gregorian)
+  calendar.timeZone = try #require(TimeZone(identifier: "America/Toronto"))
+  let days = response.daily.map { calendar.dateComponents([.month, .day, .hour], from: $0.date) }
+  #expect(days.map(\.day) == [31, 1, 2])
+  #expect(days.allSatisfy { $0.hour == 0 })
+}
+
 // MARK: - Capability helpers
 
 @Test func testMaxForecastDays() {

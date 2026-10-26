@@ -622,7 +622,9 @@ public struct OpenMeteoWeatherResponse: Decodable {
         dailyValues.strings = Self.suffixed(dailyValues.strings, with: m)
         dailyUnits = Self.suffixed(dailyUnits, with: m)
       }
-      daily = Self.buildDaily(values: dailyValues, units: dailyUnits, utcOffsetSeconds: utcOffsetSeconds)
+      daily = Self.buildDaily(
+        values: dailyValues, units: dailyUnits, timezone: timezone, utcOffsetSeconds: utcOffsetSeconds
+      )
     } else {
       daily = []
     }
@@ -771,15 +773,18 @@ public struct OpenMeteoWeatherResponse: Decodable {
   private static func buildDaily(
     values: (time: [String], strings: [String: [String?]], fields: [String: [Double?]]),
     units: [String: String],
+    timezone: String,
     utcOffsetSeconds: Int
   ) -> [DailyData] {
-    // `timezone=auto` → local date/time strings; parse in the location's timezone
-    // so day boundaries (and sunrise/sunset) land on the correct calendar day.
+    // `timezone=auto` → local strings at the response's single fixed offset,
+    // which is right for instants (sunrise/sunset) but puts each date past a
+    // DST change at 23:00 or 01:00. Dates are calendar days, so they parse in
+    // the location's own time zone.
     let zone = TimeZone(secondsFromGMT: utcOffsetSeconds) ?? TimeZone(abbreviation: "GMT")
     let dateFormatter = DateFormatter()
     dateFormatter.locale = Locale(identifier: "en_US_POSIX")
     dateFormatter.dateFormat = "yyyy-MM-dd"
-    dateFormatter.timeZone = zone
+    dateFormatter.timeZone = TimeZone(identifier: timezone) ?? zone
 
     let dateTimeFormatter = DateFormatter()
     dateTimeFormatter.locale = Locale(identifier: "en_US_POSIX")
