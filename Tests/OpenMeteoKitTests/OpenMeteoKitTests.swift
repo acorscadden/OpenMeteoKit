@@ -54,7 +54,7 @@ import Foundation
   #expect(WeatherModel.gemHrdpsWest.rawValue == "gem_hrdps_west")
   #expect(WeatherModel.iconEu.rawValue == "icon_eu")
   #expect(WeatherModel.iconD2.rawValue == "icon_d2")
-  #expect(WeatherModel.nam.rawValue == "ncep_nam_conus")
+  #expect(WeatherModel.rrfs.rawValue == "ncep_rrfs_conus")
   #expect(WeatherModel.ukv.rawValue == "ukmo_uk_deterministic_2km")
   #expect(WeatherModel.iconCh1.rawValue == "meteoswiss_icon_ch1")
   #expect(WeatherModel.iconCh2.rawValue == "meteoswiss_icon_ch2")
@@ -76,10 +76,10 @@ import Foundation
   #expect(nyModels.contains(.hrrr), "HRRR should be available in CONUS")
   #expect(nyModels.contains(.nbm), "NBM should be available in CONUS")
   #expect(nyModels.contains(.gemRegional), "GEM Regional should cover North America")
-  #expect(nyModels.contains(.nam), "NAM should be available in CONUS")
+  #expect(nyModels.contains(.rrfs), "RRFS should be available in CONUS")
   #expect(!nyModels.contains(.iconD2), "ICON-D2 is central Europe only")
   #expect(!nyModels.contains(.ukv), "UKV is the British Isles only")
-  #expect(nyModels.count == 10, "5 globals + HRRR, NBM, NAM, GEM-Reg, GEM-HRDPS")
+  #expect(nyModels.count == 10, "5 globals + HRRR, NBM, RRFS, GEM-Reg, GEM-HRDPS")
 }
 
 @Test func testAvailableModelsVancouver() {
