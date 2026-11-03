@@ -238,7 +238,7 @@ public enum WeatherModel: String, CaseIterable, Sendable {
   case gfsSeamless = "gfs_seamless"
   case hrrr = "ncep_hrrr_conus"
   case nbm = "ncep_nbm_conus"
-  case nam = "ncep_nam_conus"
+  case rrfs = "ncep_rrfs_conus"
 
   // Canadian models
   case gemGlobal = "gem_global"
@@ -270,6 +270,8 @@ public enum WeatherModel: String, CaseIterable, Sendable {
   //   jma_seamless   - answers worldwide but publishes no precipitation
   //                    probability or gusts, again with no tail to borrow from.
   //   bom_access_global, kma_seamless, gfs_graphcast025 - every variable null.
+  //   ncep_rrfs_north_america - every variable null (verified 2026-11-03).
+  //   ncep_nam_conus - NCEP retired the NAM on 2026-11-03; RRFS replaces it.
 
   // Ensemble models (requires different API endpoint - not yet supported)
   // case gfsEnsemble = "gfs_ensemble_seamless"
@@ -317,10 +319,10 @@ public enum WeatherModel: String, CaseIterable, Sendable {
       return latitude >= 46.0 && latitude <= 62.0 &&
              longitude >= -142.0 && longitude <= -110.0
 
-    // NAM Conus - shares HRRR's Lambert-conformal CONUS grid, so it gets the
-    // same (deliberately generous) envelope. Off-grid corners return no data and
-    // fall back to Apple, matching the existing HRRR behaviour.
-    case .nam:
+    // RRFS CONUS - shares HRRR's 3 km Lambert-conformal CONUS grid, so it gets
+    // the same (deliberately generous) envelope. Off-grid corners return no data
+    // and fall back to Apple, matching the existing HRRR behaviour.
+    case .rrfs:
       return latitude >= 21.0 && latitude <= 48.0 &&
              longitude >= -135.0 && longitude <= -60.0
 
@@ -407,7 +409,7 @@ public enum WeatherModel: String, CaseIterable, Sendable {
     case .gfsSeamless: return 16
     case .hrrr: return 2
     case .nbm: return 11
-    case .nam: return 2
+    case .rrfs: return 3
     case .gemGlobal: return 10
     case .gemRegional: return 3
     case .gemHrdpsContinental: return 2
@@ -432,7 +434,7 @@ public enum WeatherModel: String, CaseIterable, Sendable {
   public var standaloneTenDayCapable: Bool {
     switch self {
     case .hrrr, .gemHrdpsContinental, .gemHrdpsWest, .gemRegional,
-         .iconEu, .iconD2, .nam, .ukv, .iconCh1, .iconCh2,
+         .iconEu, .iconD2, .rrfs, .ukv, .iconCh1, .iconCh2,
          .dmiHarmonie, .icon2i, .knmiHarmonie, .aromeFrance, .arpegeEurope:
       return false
     case .ecmwfIfs025, .ecmwfAifs025Single, .iconSeamless, .gfsSeamless, .nbm,
@@ -447,7 +449,7 @@ public enum WeatherModel: String, CaseIterable, Sendable {
   public var isHighResolution: Bool {
     switch self {
     case .hrrr, .gemHrdpsContinental, .gemHrdpsWest, .gemRegional, .nbm,
-         .nam, .iconEu, .iconD2, .ukv, .iconCh1, .iconCh2,
+         .rrfs, .iconEu, .iconD2, .ukv, .iconCh1, .iconCh2,
          .metNordic, .dmiHarmonie, .icon2i, .knmiHarmonie, .aromeFrance, .arpegeEurope:
       return true
     case .ecmwfIfs025, .ecmwfAifs025Single, .iconSeamless, .gfsSeamless, .gemGlobal:
@@ -469,7 +471,7 @@ public enum WeatherModel: String, CaseIterable, Sendable {
          .gemGlobal, .iconCh1, .iconCh2, .metNordic:
       return true
     case .ecmwfAifs025Single, .iconEu, .iconD2, .aromeFrance, .arpegeEurope,
-         .nam, .gemRegional, .gemHrdpsContinental, .gemHrdpsWest, .ukv,
+         .rrfs, .gemRegional, .gemHrdpsContinental, .gemHrdpsWest, .ukv,
          .dmiHarmonie, .icon2i, .knmiHarmonie:
       return false
     }
@@ -494,7 +496,7 @@ public enum WeatherModel: String, CaseIterable, Sendable {
         : .gemGlobal
     case .gemRegional:
       return .gemGlobal
-    case .hrrr, .nam:
+    case .hrrr, .rrfs:
       return WeatherModel.nbm.isAvailable(latitude: latitude, longitude: longitude)
         ? .nbm
         : .gfsSeamless
