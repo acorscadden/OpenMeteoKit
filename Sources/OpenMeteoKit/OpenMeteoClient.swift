@@ -288,12 +288,9 @@ public enum WeatherModel: String, CaseIterable, Sendable {
     case .ecmwfIfs025, .ecmwfAifs025Single, .iconSeamless, .gfsSeamless, .gemGlobal:
       return true
 
-    // HRRR - CONUS domain
-    // Source: https://rapidrefresh.noaa.gov/hrrr/HRRR_conus.domain.txt
-    // Approximate bounding box: 21.14°N-47.84°N, 134.10°W-60.90°W
-    case .hrrr:
-      return latitude >= 21.0 && latitude <= 48.0 &&
-             longitude >= -135.0 && longitude <= -60.0
+    // HRRR and RRFS - NCEP's 3 km CONUS grid, which reaches into southern Canada.
+    case .hrrr, .rrfs:
+      return LambertConformalGrid.ncepConus3km.contains(latitude: latitude, longitude: longitude)
 
     // NBM - CONUS domain (slightly larger than HRRR, includes parts of Canada/Mexico)
     // Source: https://vlab.noaa.gov/web/mdl/nbm
@@ -318,13 +315,6 @@ public enum WeatherModel: String, CaseIterable, Sendable {
     case .gemHrdpsWest:
       return latitude >= 46.0 && latitude <= 62.0 &&
              longitude >= -142.0 && longitude <= -110.0
-
-    // RRFS CONUS - shares HRRR's 3 km Lambert-conformal CONUS grid, so it gets
-    // the same (deliberately generous) envelope. Off-grid corners return no data
-    // and fall back to Apple, matching the existing HRRR behaviour.
-    case .rrfs:
-      return latitude >= 21.0 && latitude <= 48.0 &&
-             longitude >= -135.0 && longitude <= -60.0
 
     // Domain boxes below come from each domain's published grid metadata,
     // https://api.open-meteo.com/data/<domain>/static/meta.json (crs_wkt BBOX).

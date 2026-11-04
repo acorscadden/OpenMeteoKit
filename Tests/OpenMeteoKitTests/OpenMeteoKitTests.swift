@@ -83,13 +83,14 @@ import Foundation
 }
 
 @Test func testAvailableModelsVancouver() {
-  // Vancouver, Canada - should have Canadian models but not HRRR
+  // Vancouver, Canada - Canadian models, plus HRRR/RRFS, whose grid reaches it
   let vanModels = WeatherModel.availableModels(latitude: 49.2827, longitude: -123.1207)
 
   #expect(vanModels.contains(.ecmwfIfs025), "ECMWF should be available globally")
   #expect(vanModels.contains(.gemHrdpsContinental), "HRDPS should cover Vancouver")
   #expect(vanModels.contains(.gemRegional), "GEM Regional should cover Vancouver")
-  #expect(!vanModels.contains(.hrrr), "HRRR should NOT cover Vancouver (outside CONUS)")
+  #expect(vanModels.contains(.hrrr), "The CONUS grid's north edge is above Vancouver")
+  #expect(vanModels.contains(.rrfs), "The CONUS grid's north edge is above Vancouver")
 }
 
 @Test func testAvailableModelsLondon() {
